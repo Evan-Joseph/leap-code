@@ -24,22 +24,30 @@
 ### 1. 单次训练
 
 ```bash
-# 使用默认配置（standard）
+# 使用默认配置（standard，5000步）
 bash scripts/ablation/run-lora-training.sh
 
 # 使用指定预设
 bash scripts/ablation/run-lora-training.sh --preset light
 
+# 自定义最大步数
+bash scripts/ablation/run-lora-training.sh --preset full --max-steps 3000
+
 # 自定义参数
-bash scripts/ablation/run-lora-training.sh --preset full --lr 1e-4 --epochs 3
+bash scripts/ablation/run-lora-training.sh --preset full --lr 1e-4 --max-steps 5000
 ```
 
 ### 2. 批量消融实验
 
 ```bash
-# 自动运行 light, standard, full 三种配置
+# 自动运行 light, standard, full 三种配置（默认 5000 步）
 bash scripts/ablation/run-ablation-experiments.sh
+
+# 自定义步数
+MAX_STEPS=3000 bash scripts/ablation/run-ablation-experiments.sh
 ```
+
+> **注意**: 所有消融实验默认统一在 **5000 步** 停止，以确保公平对比。
 
 ### 3. Python 脚本直接调用
 

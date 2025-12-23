@@ -30,15 +30,16 @@ LORA_PRESET="${LORA_PRESET:-standard}"
 OUTPUT_DIR="${WORK_DIR}/output_lora_${LORA_PRESET}"
 
 # ===================== 训练超参数 =====================
-EPOCHS=2                                          # 训练轮数
+MAX_STEPS=5000                                    # 最大训练步数（统一消融实验终止点）
+EPOCHS=2                                          # 训练轮数（当 MAX_STEPS 设置时会被忽略）
 BATCH_SIZE=4                                      # 每卡批大小（LoRA 可以用更大的批次）
 GRAD_ACC=4                                        # 梯度累积，等效全局批 = 16
 LR=2e-4                                          # 初始学习率（LoRA 通常使用更高的学习率）
 WARMUP_STEPS=100                                 # 预热步数
 WEIGHT_DECAY=0.01                                 # 权重衰减
 LOGGING_STEPS=10                                  # 日志打印频率
-SAVE_STEPS=200                                    # checkpoint 保存频率
-SAVE_TOTAL_LIMIT=10                               # 最多保留的 checkpoint 数量
+SAVE_STEPS=500                                    # checkpoint 保存频率（5000步保存10个）
+SAVE_TOTAL_LIMIT=15                               # 最多保留的 checkpoint 数量
 SEED=42                                           # 随机种子
 ATTN_IMPL="sdpa"                                 # 使用 PyTorch SDPA
 BF16_FLAG="--bf16"                               # 混合精度训练
@@ -69,8 +70,13 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
+        --max-steps)
+            MAX_STEPS="$2"
+            shift 2
+            ;;
         *)
             echo "未知参数: $1"
+            echo "可用参数: --preset, --lr, --epochs, --batch-size, --output-dir, --max-steps"
             exit 1
             ;;
     esac
@@ -100,7 +106,7 @@ echo "输出目录: ${OUTPUT_DIR}"
 echo "学习率: ${LR}"
 echo "批次大小: ${BATCH_SIZE}"
 echo "梯度累积: ${GRAD_ACC}"
-echo "训练轮数: ${EPOCHS}"
+echo "最大步数: ${MAX_STEPS}"
 echo "================================================"
 
 mkdir -p "${OUTPUT_DIR}" || true
@@ -112,7 +118,7 @@ python "${SCRIPT_DIR}/run-lora-finetuning.py" \
   --image_root "${IMAGE_ROOT}" \
   --output_dir "${OUTPUT_DIR}" \
   --lora_preset "${LORA_PRESET}" \
-  --num_train_epochs "${EPOCHS}" \
+  --max_steps "${MAX_STEPS}" \
   --per_device_train_batch_size "${BATCH_SIZE}" \
   --gradient_accumulation_steps "${GRAD_ACC}" \
   --learning_rate "${LR}" \
