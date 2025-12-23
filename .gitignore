@@ -1,0 +1,98 @@
+# ========================================
+# LEAP 项目 .gitignore
+# ========================================
+
+# ==================== 模型文件 ====================
+# 这些文件太大，不应上传到 GitHub
+models/
+output/
+output_lora_*/
+
+# ==================== 数据文件 ====================
+# 训练数据和评测数据集
+data/*.jsonl
+dataset/
+*.h5
+*.hdf5
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# ==================== 评测结果 ====================
+# 评测输出（可选择性上传）
+eva_results/
+fixed_eva_results/
+backup_eva_results/
+logs/
+
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==================== 虚拟环境 ====================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+
+# ==================== IDE ====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ==================== Jupyter ====================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ==================== macOS ====================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ==================== 临时文件 ====================
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+*.bak
+
+# ==================== 其他大文件 ====================
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
