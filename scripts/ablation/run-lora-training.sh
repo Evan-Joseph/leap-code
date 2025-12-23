@@ -32,18 +32,18 @@ OUTPUT_DIR="${WORK_DIR}/output_lora_${LORA_PRESET}"
 # ===================== 训练超参数 =====================
 MAX_STEPS=5000                                    # 最大训练步数（统一消融实验终止点）
 EPOCHS=2                                          # 训练轮数（当 MAX_STEPS 设置时会被忽略）
-BATCH_SIZE=4                                      # 每卡批大小（LoRA 可以用更大的批次）
-GRAD_ACC=4                                        # 梯度累积，等效全局批 = 16
+BATCH_SIZE=6                                      # 每卡批大小（与全量微调一致）
+GRAD_ACC=6                                        # 梯度累积，等效全局批 = 36（与全量微调一致）
 LR=2e-4                                          # 初始学习率（LoRA 通常使用更高的学习率）
-WARMUP_STEPS=100                                 # 预热步数
+WARMUP_STEPS=200                                 # 预热步数（按 5000 步比例调整）
 WEIGHT_DECAY=0.01                                 # 权重衰减
 LOGGING_STEPS=10                                  # 日志打印频率
-SAVE_STEPS=500                                    # checkpoint 保存频率（5000步保存10个）
-SAVE_TOTAL_LIMIT=15                               # 最多保留的 checkpoint 数量
+SAVE_STEPS=200                                    # checkpoint 保存频率（与全量微调一致）
+SAVE_TOTAL_LIMIT=30                               # 最多保留的 checkpoint 数量（5000步保存25个）
 SEED=42                                           # 随机种子
 ATTN_IMPL="sdpa"                                 # 使用 PyTorch SDPA
 BF16_FLAG="--bf16"                               # 混合精度训练
-GRAD_CP_FLAG="--gradient_checkpointing"          # 开启梯度检查点
+GRAD_CP_FLAG=""                                  # 显存充足，关闭梯度检查点以加速
 
 # ===================== 参数解析 =====================
 # 支持通过命令行参数覆盖配置
