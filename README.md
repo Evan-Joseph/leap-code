@@ -1,10 +1,16 @@
-<a name="project-name"></a>
+<a name="leap"></a>
 
-# [PROJECT_NAME]: Multimodal Task Planning with Qwen3-VL on VLABench
+# LEAP: Logical Embodied Action Planning for Long-Horizon Robotic Tasks via Generative Vision-Language Alignment
+
+<p align="center">
+  <a href="https://huggingface.co/EvanSirius/leap-ckpts"><img src="https://img.shields.io/badge/🤗%20Model-leap--ckpts-blue" alt="Model"></a>
+  <a href="https://huggingface.co/datasets/EvanSirius/leap-agibot-processed"><img src="https://img.shields.io/badge/🤗%20Dataset-leap--agibot--processed-green" alt="Dataset"></a>
+  <a href="https://github.com/OpenMOSS/VLABench"><img src="https://img.shields.io/badge/Benchmark-VLABench-orange" alt="VLABench"></a>
+</p>
 
 ## 1. 介绍 · Introduction
 
-`[PROJECT_NAME]` 聚焦多模态机器人任务规划，围绕 **Qwen3-VL-2B-Instruct** 构建全参微调、VLABench 六维度评测与 LLM-as-a-Judge 盲审流程。当前版本旨在提供可复现实验脚本，便于研究者验证和扩展以下能力：
+**LEAP** 聚焦多模态机器人任务规划，围绕 **Qwen3-VL-2B-Instruct** 构建全参微调、VLABench 六维度评测与 LLM-as-a-Judge 盲审流程。当前版本旨在提供可复现实验脚本，便于研究者验证和扩展以下能力：
 
 - Memory & Tasks、CommonSense、Semantic、Spatial、PhysicsLaw、Complex 六个维度的统一评测。
 - 训练、评测、盲审、可视化脚本的标准化组织，降低跨场景复现门槛。
@@ -13,7 +19,7 @@
 ## 2. 仓库结构 · Repository Structure
 
 ```text
-[PROJECT_NAME]/
+LEAP/
 ├── configs/        # 全局路径、训练/评测常量（WorkspaceConfig）
 ├── data/           # JSONL、LOVE-Agibot 图像
 ├── dataset/        # vlm_evaluation_v1.0（按 CommonSense/Complex/... 维度拆分）
@@ -26,24 +32,33 @@
 │   ├── ablation/   # LoRA 消融实验脚本（参数高效微调）
 │   ├── evaluation/ # VLABench/LLM-Judge/可视化脚本
 │   └── utils/      # 数据清洗、LOVE-Agibot 处理
-├── VLABench/       # 官方评测子模块（仓库内已内置，如需同步再执行 submodule）
+├── VLABench/       # 官方评测子模块（需执行 git submodule update --init）
 ├── eva_results/    # 最新评测结果，按维度/模型分层
-├── backup_eva_results/ # 归档历史评测结果
-├── run_vlabench_evaluation_bingXing.sh # 并行批量评测脚本示例
 ├── qwen-ft-env.yml # Conda 环境定义
 └── README.md
 ```
 
 ## 3. 快速开始 · Quick Start
 
-### 3.1 环境准备
+### 3.1 克隆仓库
+
+```bash
+# 包含 VLABench 子模块
+git clone --recursive https://github.com/Evan-Joseph/leap-code.git
+cd leap-code
+
+# 如果忘记 --recursive，可以后续执行：
+git submodule update --init --recursive
+```
+
+### 3.2 环境准备
 
 ```bash
 conda env create -f qwen-ft-env.yml
 conda activate qwen-ft-env
 ```
 
-### 3.2 下载模型与数据
+### 3.3 下载模型与数据
 
 ```bash
 # 1) 获取 Qwen3-VL-2B-Instruct（脚本内置 hf-mirror 加速）
@@ -52,11 +67,11 @@ bash scripts/download/download_model.sh
 # 2) 下载 VLABench 评测集（智能限流重试）
 python scripts/download/download_vlabench_with_retry.py
 
-# 3) （可选）抓取 LOVE-Agibot-Beta 图像首帧
-python scripts/utils/prepare_love_agibot.py --num-workers 4
+# 3) （可选）下载 LEAP 预处理数据集
+huggingface-cli download EvanSirius/leap-agibot-processed --local-dir data/
 ```
 
-### 3.3 全参微调示例
+### 3.4 全参微调示例
 
 ```bash
 bash scripts/training/run-training.sh
@@ -68,7 +83,7 @@ bash scripts/training/run-training.sh
 2. 读取 `data/train_151230.jsonl` 与 `models/Qwen3-VL-2B-Instruct/`。
 3. 以 BF16、SDPA 注意力和 6×6 的梯度累积开展训练，并将 checkpoint 写入 `output/`。
 
-### 3.4 LoRA 参数高效微调（消融实验）
+### 3.5 LoRA 参数高效微调（消融实验）
 
 ```bash
 # 使用默认 standard 预设
@@ -87,7 +102,7 @@ LoRA 预设配置说明：
 - `full`: r=32, 覆盖更多层，接近全量微调效果
 - `aggressive`: r=64, 高秩 LoRA，最大化表达能力
 
-### 3.5 VLABench 多维度评测
+### 3.6 VLABench 多维度评测
 
 ```bash
 # 全维度（M&T/CommonSense/.../Complex）批量评测
@@ -107,23 +122,26 @@ python scripts/evaluation/analyze_output_results.py
 
 ## 4. 结果与可视化 · Results
 
-| Model | M&T ↑ | CommonSense ↑ | Complex ↑ | Avg Final Score ↑ |
-| --- | --- | --- | --- | --- |
-| Qwen3-VL-2B-Baseline | 29.60 | 25.70 | 14.28 | 23.19 |
-| [PROJECT_NAME] Finetuned (checkpoint-5000) | 32.96 | 27.28 | 19.67 | 26.63 |
+| Model | M&T ↑ | CommonSense ↑ | Semantic ↑ | Spatial ↑ | PhysicalLaw ↑ | Complex ↑ | Avg ↑ |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Qwen3-VL-2B-Baseline | 29.60 | 25.70 | 25.89 | 31.10 | 24.00 | 14.28 | 25.10 |
+| **LEAP (checkpoint-5000)** | **32.96** | **27.27** | **28.49** | **31.62** | **30.27** | **19.67** | **28.38** |
+| Improvement | +11.3% | +6.1% | +10.0% | +1.7% | +26.1% | +37.7% | **+13.1%** |
 
 > 数据来源：`eva_results/<dimension>/<model>/final_score.json` 中 `total_score` 的均值；图像可通过 `scripts/evaluation/draw_*.py` 生成。
 
 ## 5. 数据与模型 · Datasets & Models
 
-- **VLABench**：官方仓库 <https://github.com/VLABench/VLABench>，本项目直接嵌入子模块用于评测。
-- **LOVE-Agibot-Beta**：Hugging Face `EvanSirius/LOVE-Agibot-Beta`，脚本默认只提取首帧以控制大小。
-- **基座模型**：`Qwen/Qwen3-VL-2B-Instruct`（Hugging Face）。
-- **自有 checkpoint**：`output/checkpoint-*` 为中间断点，可选择性同步到公开 Model Zoo（若发布的话在此添加链接）。
+| 资源 | 链接 | 说明 |
+| --- | --- | --- |
+| **LEAP Checkpoints** | [🤗 EvanSirius/leap-ckpts](https://huggingface.co/EvanSirius/leap-ckpts) | 全量微调权重 (checkpoint-200 ~ checkpoint-7000) |
+| **LEAP Dataset** | [🤗 EvanSirius/leap-agibot-processed](https://huggingface.co/datasets/EvanSirius/leap-agibot-processed) | 训练集、测试集、盲评集 |
+| **VLABench** | [GitHub OpenMOSS/VLABench](https://github.com/OpenMOSS/VLABench) | 官方评测框架（Git Submodule） |
+| **基座模型** | [🤗 Qwen/Qwen3-VL-2B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct) | Qwen3-VL 2B 指令微调版 |
 
 ## 6. Citation & Acknowledgement
 
-```
+```bibtex
 @article{zhang2024vlabench,
 	title={VLABench: A Large-Scale Benchmark for Language-Conditioned Robotics Manipulation with Long-Horizon Reasoning Tasks},
 	author={Shiduo Zhang and Zhe Xu and Peiju Liu and others},
@@ -142,3 +160,6 @@ python scripts/evaluation/analyze_output_results.py
 - 感谢 Qwen 团队开放 Qwen3-VL 系列，使得本仓库可以在开源权重上构建。
 - 致谢 VLABench、LOVE-Agibot 等项目提供数据与评测基础设施。
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -1,10 +1,16 @@
-<a name="project-name-en"></a>
+<a name="leap-en"></a>
 
-# [PROJECT_NAME]: Multimodal Task Planning with Qwen3-VL on VLABench
+# LEAP: Logical Embodied Action Planning for Long-Horizon Robotic Tasks via Generative Vision-Language Alignment
+
+<p align="center">
+  <a href="https://huggingface.co/EvanSirius/leap-ckpts"><img src="https://img.shields.io/badge/🤗%20Model-leap--ckpts-blue" alt="Model"></a>
+  <a href="https://huggingface.co/datasets/EvanSirius/leap-agibot-processed"><img src="https://img.shields.io/badge/🤗%20Dataset-leap--agibot--processed-green" alt="Dataset"></a>
+  <a href="https://github.com/OpenMOSS/VLABench"><img src="https://img.shields.io/badge/Benchmark-VLABench-orange" alt="VLABench"></a>
+</p>
 
 ## 1. Overview
 
-`[PROJECT_NAME]` focuses on multimodal robotic task planning built on **Qwen3-VL-2B-Instruct**, offering a complete workflow that covers full-parameter fine-tuning, the six-dimensional VLABench evaluation suite, and an LLM-as-a-Judge blind review process. The repository provides reproducible scripts so researchers can quickly validate and extend the following capabilities:
+**LEAP** focuses on multimodal robotic task planning built on **Qwen3-VL-2B-Instruct**, offering a complete workflow that covers full-parameter fine-tuning, the six-dimensional VLABench evaluation suite, and an LLM-as-a-Judge blind review process. The repository provides reproducible scripts so researchers can quickly validate and extend the following capabilities:
 
 - Unified evaluation for Memory & Tasks, CommonSense, Semantic, Spatial, PhysicsLaw, and Complex dimensions.
 - Standardized organization for training, evaluation, blind review, and visualization scripts to reduce cross-scenario reproduction cost.
@@ -13,7 +19,7 @@
 ## 2. Repository Structure
 
 ```text
-[PROJECT_NAME]/
+LEAP/
 ├── configs/        # WorkspaceConfig with global paths plus train/eval constants
 ├── data/           # JSONL conversations and LOVE-Agibot images
 ├── dataset/        # vlm_evaluation_v1.0 split (CommonSense/Complex/... folders)
@@ -23,26 +29,36 @@
 ├── scripts/
 │   ├── download/   # Model & VLABench download helpers
 │   ├── training/   # run-finetuning.py and run-training.sh entrypoints
+│   ├── ablation/   # LoRA ablation experiment scripts (parameter-efficient fine-tuning)
 │   ├── evaluation/ # VLABench, LLM-Judge, visualization scripts
 │   └── utils/      # Data cleaning + LOVE-Agibot processing
-├── VLABench/       # Official benchmark submodule (vendored; update via submodule when needed)
+├── VLABench/       # Official benchmark submodule (run git submodule update --init)
 ├── eva_results/    # Latest evaluation metrics organized by dimension/model
-├── backup_eva_results/ # Archived evaluation snapshots for reproducibility
-├── run_vlabench_evaluation_bingXing.sh # Example script for parallel evaluation batches
 ├── qwen-ft-env.yml # Conda environment specification
 └── README*.md
 ```
 
 ## 3. Quick Start
 
-### 3.1 Environment
+### 3.1 Clone the Repository
+
+```bash
+# Clone with VLABench submodule
+git clone --recursive https://github.com/Evan-Joseph/leap-code.git
+cd leap-code
+
+# If you forgot --recursive, run afterwards:
+git submodule update --init --recursive
+```
+
+### 3.2 Environment Setup
 
 ```bash
 conda env create -f qwen-ft-env.yml
 conda activate qwen-ft-env
 ```
 
-### 3.2 Download Models & Data
+### 3.3 Download Models & Data
 
 ```bash
 # 1) Pull Qwen3-VL-2B-Instruct (script ships with hf-mirror acceleration)
@@ -51,11 +67,11 @@ bash scripts/download/download_model.sh
 # 2) Fetch VLABench evaluation set with smart retry logic
 python scripts/download/download_vlabench_with_retry.py
 
-# 3) (Optional) Extract the first frame of LOVE-Agibot-Beta videos
-python scripts/utils/prepare_love_agibot.py --num-workers 4
+# 3) (Optional) Download LEAP pre-processed dataset
+huggingface-cli download EvanSirius/leap-agibot-processed --local-dir data/
 ```
 
-### 3.3 Full-Parameter Fine-Tuning
+### 3.4 Full-Parameter Fine-Tuning
 
 ```bash
 bash scripts/training/run-training.sh
@@ -67,7 +83,26 @@ The script automatically:
 2. Loads `data/train_151230.jsonl` together with `models/Qwen3-VL-2B-Instruct/`.
 3. Launches BF16 training with SDPA attention, gradient accumulation (6×6), and stores checkpoints under `output/`.
 
-### 3.4 VLABench Evaluation & Blind Review
+### 3.5 LoRA Parameter-Efficient Fine-Tuning (Ablation)
+
+```bash
+# Use default standard preset
+bash scripts/ablation/run-lora-training.sh
+
+# Use specific preset (light/standard/full/aggressive)
+bash scripts/ablation/run-lora-training.sh --preset full
+
+# Run batch ablation experiments
+bash scripts/ablation/run-ablation-experiments.sh
+```
+
+LoRA Preset Configurations:
+- `light`: r=8, minimal parameters, good for quick validation
+- `standard`: r=16, balanced between performance and efficiency
+- `full`: r=32, covers more layers, close to full fine-tuning
+- `aggressive`: r=64, high-rank LoRA for maximum expressiveness
+
+### 3.6 VLABench Evaluation & Blind Review
 
 ```bash
 # Evaluate all dimensions (M&T/CommonSense/.../Complex)
@@ -87,23 +122,26 @@ python scripts/evaluation/analyze_output_results.py
 
 ## 4. Results & Visualization
 
-| Model | M&T ↑ | CommonSense ↑ | Complex ↑ | Avg Final Score ↑ |
-| --- | --- | --- | --- | --- |
-| Qwen3-VL-2B-Baseline | 29.60 | 25.70 | 14.28 | 23.19 |
-| [PROJECT_NAME] Finetuned (checkpoint-5000) | 32.96 | 27.28 | 19.67 | 26.63 |
+| Model | M&T ↑ | CommonSense ↑ | Semantic ↑ | Spatial ↑ | PhysicalLaw ↑ | Complex ↑ | Avg ↑ |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Qwen3-VL-2B-Baseline | 29.60 | 25.70 | 25.89 | 31.10 | 24.00 | 14.28 | 25.10 |
+| **LEAP (checkpoint-5000)** | **32.96** | **27.27** | **28.49** | **31.62** | **30.27** | **19.67** | **28.38** |
+| Improvement | +11.3% | +6.1% | +10.0% | +1.7% | +26.1% | +37.7% | **+13.1%** |
 
 > Scores are averaged from `eva_results/<dimension>/<model>/final_score.json` (`total_score`). Visualization scripts live in `scripts/evaluation/draw_*.py`.
 
 ## 5. Datasets & Models
 
-- **VLABench** – official repository: <https://github.com/VLABench/VLABench>; shipped as a git submodule for evaluation.
-- **LOVE-Agibot-Beta** – Hugging Face dataset `EvanSirius/LOVE-Agibot-Beta`; the provided utility defaults to first-frame extraction for size control.
-- **Base model** – `Qwen/Qwen3-VL-2B-Instruct` from Hugging Face Hub.
-- **Project checkpoints** – intermediates under `output/checkpoint-*`; publish them to your preferred Model Zoo when appropriate.
+| Resource | Link | Description |
+| --- | --- | --- |
+| **LEAP Checkpoints** | [🤗 EvanSirius/leap-ckpts](https://huggingface.co/EvanSirius/leap-ckpts) | Full fine-tuning weights (checkpoint-200 ~ checkpoint-7000) |
+| **LEAP Dataset** | [🤗 EvanSirius/leap-agibot-processed](https://huggingface.co/datasets/EvanSirius/leap-agibot-processed) | Training set, test set, blind evaluation set |
+| **VLABench** | [GitHub OpenMOSS/VLABench](https://github.com/OpenMOSS/VLABench) | Official evaluation framework (Git Submodule) |
+| **Base Model** | [🤗 Qwen/Qwen3-VL-2B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct) | Qwen3-VL 2B instruction-tuned version |
 
 ## 6. Citation & Acknowledgement
 
-```
+```bibtex
 @article{zhang2024vlabench,
     title={VLABench: A Large-Scale Benchmark for Language-Conditioned Robotics Manipulation with Long-Horizon Reasoning Tasks},
     author={Shiduo Zhang and Zhe Xu and Peiju Liu and others},
@@ -128,3 +166,7 @@ python scripts/evaluation/analyze_output_results.py
 - **Monitoring**: `tmp_monitor_evaluation.py` and `tmp_analyze_data.py` offer lightweight hooks for tracking evaluation progress when running multiple rounds.
 - **Storage hygiene**: Move finished evaluation JSON/plots into `backup_eva_results/` to keep `eva_results/` focused on current experiments.
 - **Reproducibility**: Pin your CUDA/cuDNN version inside `qwen-ft-env.yml` before sharing checkpoints to avoid runtime drift.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
