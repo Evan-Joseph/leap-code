@@ -10,8 +10,9 @@ output_lora_*/
 
 # ==================== 数据文件 ====================
 # 训练数据和评测数据集
-data/*.jsonl
-dataset/
+data/*
+!data/missing_task_ids.txt
+dataset/*
 *.h5
 *.hdf5
 *.safetensors

@@ -52,38 +52,25 @@ class VLABenchDownloader:
         self.retry_count = 0
         self.current_sleep = initial_sleep
     
-    def build_command(self):
+    def build_command(self, dimension=None):
         """构建huggingface-cli下载命令"""
         cmd = [
             "huggingface-cli", "download",
-            self.repo_id,  # repo_id 应该紧跟在 download 命令之后
+            self.repo_id,
             "--repo-type", "dataset",
             "--local-dir", self.local_dir,
             "--max-workers", str(self.max_workers),
             "--resume-download"
         ]
         
-        # 添加include模式
-        for pattern in self.include_patterns:
-            cmd.extend(["--include", pattern])
+        if dimension:
+            cmd.extend(["--include", f"{dimension}/**"])
+        else:
+            # 添加所有include模式
+            for pattern in self.include_patterns:
+                cmd.extend(["--include", pattern])
         
         return cmd
-    
-    def check_rate_limit(self, output):
-        """检查输出中是否包含速率限制错误"""
-        rate_limit_patterns = [
-            r"429",  # HTTP 429 Too Many Requests
-            r"rate limit",
-            r"too many requests",
-            r"HTTPError.*429",
-            r"ReadTimeoutError",
-            r"Connection.*reset",
-        ]
-        
-        for pattern in rate_limit_patterns:
-            if re.search(pattern, output, re.IGNORECASE):
-                return True
-        return False
     
     def log(self, message, level="INFO"):
         """带时间戳的日志输出"""
@@ -106,85 +93,85 @@ class VLABenchDownloader:
         self.log(f"并发数: {self.max_workers}")
         print("=" * 60)
         
-        while True:
-            try:
-                cmd = self.build_command()
-                self.log(f"执行命令: {' '.join(cmd)}")
-                
-                # 执行下载命令
-                env = os.environ.copy()
-                env["HF_ENDPOINT"] = "https://hf-mirror.com"
+        # 提取所有维度
+        dimensions = [p.split('/')[0] for p in self.include_patterns]
+        
+        for dim in dimensions:
+            self.log(f"正在处理维度: {dim} ...")
+            while True:
+                try:
+                    cmd = self.build_command(dimension=dim)
+                    self.log(f"执行命令: {' '.join(cmd)}")
+                    
+                    # 执行下载命令
+                    env = os.environ.copy()
+                    # 强制使用镜像站，不依赖外部环境变量
+                    env["HF_ENDPOINT"] = "https://hf-mirror.com"
+                    
+                    env["HF_HUB_DOWNLOAD_TIMEOUT"] = "60"  # 增加下载超时时间
+                    env["HF_HUB_ETAG_TIMEOUT"] = "60"      # 增加元数据获取超时时间
+                    env["HF_HUB_ENABLE_HF_TRANSFER"] = "1" # 启用 hf-transfer 加速
 
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    env=env
-                )
-                
-                output_buffer = []
-                rate_limited = False
-                
-                # 实时读取输出
-                for line in process.stdout:
-                    print(line, end='', flush=True)
-                    output_buffer.append(line)
-                    
-                    # 检查是否遇到速率限制
-                    if self.check_rate_limit(line):
-                        rate_limited = True
-                
-                process.wait()
-                
-                # 检查退出码
-                if process.returncode == 0:
-                    self.log("下载完成！", "SUCCESS")
-                    return True
-                
-                # 检查是否因为速率限制失败
-                full_output = ''.join(output_buffer)
-                if rate_limited or self.check_rate_limit(full_output):
-                    self.retry_count += 1
-                    self.log(f"检测到API速率限制（第{self.retry_count}次）", "WARN")
-                    self.log(f"休眠 {self.current_sleep} 秒后重试...", "SLEEP")
-                    
-                    time.sleep(self.current_sleep)
-                    
-                    # 指数退避：每次失败后增加休眠时间
-                    self.current_sleep = min(
-                        self.current_sleep * self.backoff_factor,
-                        self.max_sleep
+                    # 禁用代理，防止干扰镜像站连接
+                    if "http_proxy" in env: del env["http_proxy"]
+                    if "https_proxy" in env: del env["https_proxy"]
+                    if "all_proxy" in env: del env["all_proxy"]
+
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        env=env
                     )
                     
-                    self.log("继续下载...", "INFO")
-                    continue
-                else:
-                    # 其他错误
-                    self.log(f"下载失败，退出码: {process.returncode}", "ERROR")
-                    self.log("非速率限制错误，建议手动检查", "WARN")
-                    return False
+                    # 实时读取输出
+                    for line in process.stdout:
+                        print(line, end='', flush=True)
                     
-            except KeyboardInterrupt:
-                self.log("用户中断下载", "WARN")
-                return False
-            except Exception as e:
-                self.log(f"发生异常: {str(e)}", "ERROR")
-                self.log(f"休眠 {self.current_sleep} 秒后重试...", "SLEEP")
-                time.sleep(self.current_sleep)
-                self.current_sleep = min(
-                    self.current_sleep * self.backoff_factor,
-                    self.max_sleep
-                )
+                    process.wait()
+                    
+                    # 检查退出码
+                    if process.returncode == 0:
+                        # 额外检查：确保维度目录确实存在且非空
+                        dim_path = Path(self.local_dir) / dim
+                        if dim_path.exists() and any(dim_path.iterdir()):
+                            self.log(f"维度 {dim} 下载并验证成功！", "SUCCESS")
+                            break # 处理下一个维度
+                        else:
+                            self.log(f"警告: 维度目录 {dim} 不存在或为空，下载可能未真正完成，10秒后重试...", "WARN")
+                            time.sleep(10)
+                            continue
+                    
+                    # 无论什么报错，只要失败了就间隔10秒重试
+                    self.retry_count += 1
+                    self.log(f"维度 {dim} 下载进程异常退出 (退出码: {process.returncode})，第 {self.retry_count} 次尝试", "WARN")
+                    self.log(f"休眠 10 秒后自动重试...", "SLEEP")
+                    time.sleep(10)
+                    continue
+                    
+                except KeyboardInterrupt:
+                    self.log("用户中断下载", "WARN")
+                    return False
+                except Exception as e:
+                    self.retry_count += 1
+                    self.log(f"发生异常: {str(e)}，第 {self.retry_count} 次尝试", "ERROR")
+                    self.log(f"休眠 10 秒后自动重试...", "SLEEP")
+                    time.sleep(10)
+                    continue
+        
+        self.log("所有维度下载完成并验证成功！", "SUCCESS")
+        return True
 
 
 def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="智能下载VLABench数据集（自动处理速率限制）")
-    parser.add_argument("--dimensions", nargs='+', default=["M&T"], 
-                        help="要下载的评估维度 (默认: M&T)")
+    parser.add_argument("--dimensions", nargs='+', 
+                        default=["M&T", "CommenSence", "Complex", "PhysicsLaw", "Semantic", "Spatial"], 
+                        help="要下载的评估维度")
     parser.add_argument("--local-dir", default=None,
                         help="本地保存目录 (默认: 仓库根下 dataset/vlm_evaluation_v1.0)")
     parser.add_argument("--max-workers", type=int, default=2,

@@ -61,13 +61,16 @@ conda activate qwen-ft-env
 ### 3.3 下载模型与数据
 
 ```bash
-# 1) 获取 Qwen3-VL-2B-Instruct（脚本内置 hf-mirror 加速）
+# 1) 获取 Qwen3-VL-2B-Instruct（脚本内置 hf-mirror 加速，修复了绝对路径问题）
 bash scripts/download/download_model.sh
 
-# 2) 下载 VLABench 评测集（智能限流重试）
+# 2) 下载 VLABench 评测集（优化了限流重试逻辑，支持断点续传）
 python scripts/download/download_vlabench_with_retry.py
 
-# 3) （可选）下载 LEAP 预处理数据集
+# 3) 验证 VLABench 数据完整性（新增验证脚本，确保下载无损）
+python scripts/utils/verify_dataset.py
+
+# 4) （可选）下载 LEAP 预处理数据集
 huggingface-cli download EvanSirius/leap-agibot-processed --local-dir data/
 ```
 

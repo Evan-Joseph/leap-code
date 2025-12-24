@@ -10,7 +10,7 @@ set -euo pipefail
 
 # 解析脚本与仓库根路径，使用绝对路径确保从任意 cwd 调用脚本都正确
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"  # scripts/download
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"                 # repo root (parent of scripts)
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"               # repo root (parent of scripts)
 
 # 创建模型目录（仓库下的 models）
 mkdir -p "${REPO_ROOT}/models"
