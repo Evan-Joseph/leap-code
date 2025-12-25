@@ -272,11 +272,49 @@ class Qwen3VLLoRAAdapter(BaseVLM):
         # 加载 LoRA 适配器
         self.model = PeftModel.from_pretrained(base_model, self.lora_adapter_path)
         
-        # 可选：合并权重以加速推理
-        # self.model = self.model.merge_and_unload()
+        # 合并权重以大幅加速推理
+        print(f"{Fore.GREEN}✓ 正在合并 LoRA 权重以加速推理...{Style.RESET_ALL}")
+        self.model = self.model.merge_and_unload()
         
         # 加载处理器
         self.processor = AutoProcessor.from_pretrained(self.base_model_path)
+        
+        # 优先从基座模型加载模板
+        baseline_template = None
+        bt_path = os.path.join(self.base_model_path, "chat_template.json")
+        if os.path.exists(bt_path):
+            try:
+                with open(bt_path, 'r') as f:
+                    data = json.load(f)
+                    baseline_template = data.get("chat_template")
+                    if baseline_template:
+                        print(f"{Fore.GREEN}✓ 已成功从基座模型加载模板{Style.RESET_ALL}")
+            except:
+                pass
+
+        if baseline_template:
+            self.processor.chat_template = baseline_template
+            if hasattr(self.processor, 'tokenizer'):
+                self.processor.tokenizer.chat_template = baseline_template
+        else:
+            # 兜底模板（支持图像）
+            if not hasattr(self.processor, 'chat_template') or self.processor.chat_template is None:
+                print(f"{Fore.YELLOW}警告: 未找到有效模板，使用内置兜底模板...{Style.RESET_ALL}")
+                default_template = (
+                    "{% for message in messages %}"
+                    "{{ '<|im_start|>' + message['role'] + '\\n' }}"
+                    "{% for content in message['content'] %}"
+                    "{% if content['type'] == 'text' %}{{ content['text'] }}"
+                    "{% elif content['type'] == 'image' %}<|vision_start|><|image_pad|><|vision_end|>"
+                    "{% endif %}"
+                    "{% endfor %}"
+                    "{{ '<|im_end|>\\n' }}"
+                    "{% endfor %}"
+                    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
+                )
+                self.processor.chat_template = default_template
+                if hasattr(self.processor, 'tokenizer'):
+                    self.processor.tokenizer.chat_template = default_template
         
         print(f"{Fore.GREEN}✓ LoRA 模型加载完成{Style.RESET_ALL}")
     
@@ -352,8 +390,9 @@ class Qwen3VLLoRAAdapter(BaseVLM):
             output = {"origin_output": "", "format_error": "inference_error"}
         
         del inputs, generated_ids, generated_ids_trimmed
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # 移除频繁的 empty_cache，这会显著降低推理速度
+        # if torch.cuda.is_available():
+        #     torch.cuda.empty_cache()
         
         self.print_memory_usage("推理完成")
         
@@ -366,7 +405,7 @@ class Qwen3VLLoRAAdapter(BaseVLM):
 def main():
     parser = argparse.ArgumentParser(description="LoRA 消融实验评估脚本")
     parser.add_argument("--dimension", type=str, required=True,
-                        choices=["M&T", "CommonSense", "Semantic", "Spatial", "PhysicalLaw", "Complex"],
+                        choices=["M&T", "CommenSence", "Semantic", "Spatial", "PhysicsLaw", "Complex"],
                         help="评估维度")
     parser.add_argument("--base_model_path", type=str, required=True,
                         help="基座模型路径")

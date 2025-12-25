@@ -25,16 +25,34 @@ from rich.align import Align
 class EvaluationMonitor:
     def __init__(self, log_dir: Optional[Path] = None):
         self.console = Console()
-        repo_root = Path(os.environ.get("PROJECT_ROOT", Path(__file__).resolve().parent))
-        default_logs = repo_root / "logs"
-        self.log_dir = Path(os.environ.get("PROJECT_LOG_DIR", log_dir or default_logs))
+        repo_root = Path(__file__).resolve().parent
+        
+        # 自动检测日志目录：优先 LoRA，然后是 1shot，最后是默认 logs
+        if log_dir:
+            self.log_dir = Path(log_dir)
+        elif os.path.exists(repo_root / "logs_lora"):
+            self.log_dir = repo_root / "logs_lora"
+        elif os.path.exists(repo_root / "logs_1shot"):
+            self.log_dir = repo_root / "logs_1shot"
+        else:
+            self.log_dir = repo_root / "logs"
+            
         self.dimensions = {
             "M&T": "log_mt.log",
-            "CommonSense": "log_commonsense.log",  # 修正拼写
+            "CommenSence": "log_commonsense.log",
             "Semantic": "log_semantic.log",
             "Spatial": "log_spatial.log",
-            "PhysicalLaw": "log_physics.log",     # 修正拼写
+            "PhysicsLaw": "log_physics.log",
             "Complex": "log_complex.log"
+        }
+        # LoRA 模式下的日志映射（模糊匹配）
+        self.lora_patterns = {
+            "M&T": r"lora_.*_M&T.log",
+            "CommenSence": r"lora_.*_CommenSence.log",
+            "Semantic": r"lora_.*_Semantic.log",
+            "Spatial": r"lora_.*_Spatial.log",
+            "PhysicsLaw": r"lora_.*_PhysicsLaw.log",
+            "Complex": r"lora_.*_Complex.log"
         }
         self.status = {}
         self.init_status()
@@ -140,8 +158,18 @@ class EvaluationMonitor:
             if percent >= 100:
                 is_running = False
             
-            # 检查是否有错误或异常终止
-            if "Traceback" in recent_content or "Error" in recent_content:
+            # 检查是否有致命错误（忽略 GLFWError 等非致命警告）
+            # 只检查最近 10 行，防止历史错误导致误报
+            fatal_error_keywords = ["CUDA out of memory", "RuntimeError", "ValueError", "ImportError"]
+            has_error = False
+            for line in last_lines:
+                if "Traceback" in line or any(kw in line for kw in fatal_error_keywords):
+                    # 排除非致命的 GLFWError
+                    if "GLFWError" not in line:
+                        has_error = True
+                        break
+            
+            if has_error:
                 is_running = False
             
             return {
@@ -152,6 +180,7 @@ class EvaluationMonitor:
                 "eta": eta,
                 "start_time": start_time,
                 "is_running": is_running,
+                "has_error": has_error,
                 "tasks": tasks[:5]  # 只显示前5个任务
             }
         except Exception as e:
@@ -160,19 +189,42 @@ class EvaluationMonitor:
     
     def update_status(self):
         """更新所有维度的状态"""
-        for dim, log_file in self.dimensions.items():
-            log_path = self.log_dir / log_file
-            data = self.parse_log_file(log_path)
-            if data:
-                self.status[dim].update(data)
-                self.status[dim]["last_update"] = datetime.now().strftime("%H:%M:%S")
+        for dim in self.dimensions:
+            log_path = None
+            
+            # 如果是 logs_lora 目录，寻找最新的匹配该维度的日志
+            if "logs_lora" in str(self.log_dir) and os.path.exists(self.log_dir):
+                pattern = self.lora_patterns.get(dim)
+                if pattern:
+                    try:
+                        matches = [f for f in os.listdir(self.log_dir) if re.match(pattern, f)]
+                        if matches:
+                            # 按修改时间排序，取最新的
+                            matches.sort(key=lambda x: os.path.getmtime(self.log_dir / x), reverse=True)
+                            log_path = self.log_dir / matches[0]
+                    except Exception:
+                        pass
+            
+            # 如果没找到 LoRA 日志，尝试普通模式
+            if not log_path:
+                log_file = self.dimensions[dim]
+                log_path = self.log_dir / log_file
+            
+            if log_path and os.path.exists(log_path):
+                data = self.parse_log_file(log_path)
+                if data:
+                    self.status[dim].update(data)
+                    self.status[dim]["last_update"] = datetime.now().strftime("%H:%M:%S")
     
     def create_dimension_table(self, dimension):
         """为单个维度创建状态表格"""
         status = self.status[dimension]
         
         # 状态颜色
-        if status["is_running"]:
+        if status.get("has_error"):
+            status_color = "red"
+            status_text = "发生错误"
+        elif status["is_running"]:
             status_color = "green"
             status_text = "运行中"
         elif status["percent"] >= 100:
@@ -180,7 +232,7 @@ class EvaluationMonitor:
             status_text = "已完成"
         else:
             status_color = "yellow"
-            status_text = "未知"
+            status_text = "等待中"
         
         # 创建表格
         table = Table(show_header=False, box=None, padding=0)
@@ -247,7 +299,7 @@ class EvaluationMonitor:
         top_row = Layout()
         top_row.split_column(
             Layout(self.create_dimension_table("M&T")),
-            Layout(self.create_dimension_table("CommonSense"))  # 修正拼写
+            Layout(self.create_dimension_table("CommenSence"))
         )
         
         middle_row = Layout()
@@ -258,7 +310,7 @@ class EvaluationMonitor:
         
         bottom_row = Layout()
         bottom_row.split_column(
-            Layout(self.create_dimension_table("PhysicalLaw")),  # 修正拼写
+            Layout(self.create_dimension_table("PhysicsLaw")),
             Layout(self.create_dimension_table("Complex"))
         )
         

@@ -43,7 +43,7 @@ class WorkspaceConfig:
         os.environ['VLABENCH_ROOT'] = str(WorkspaceConfig.VLABENCH_ROOT)
     
     # 评估维度配置
-    EVALUATION_DIMENSIONS = ["M&T", "CommonSense", "Semantic", "Spatial", "PhysicsLaw", "Complex"]
+    EVALUATION_DIMENSIONS = ["M&T", "CommenSence", "Semantic", "Spatial", "PhysicsLaw", "Complex"]
     
     # 默认评估参数
     DEFAULT_EVAL_CONFIG = {

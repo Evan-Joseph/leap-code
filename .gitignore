@@ -2,6 +2,8 @@
 # LEAP 项目 .gitignore
 # ========================================
 
+tmp_LEAP论文.md
+
 # ==================== 模型文件 ====================
 # 这些文件太大，不应上传到 GitHub
 models/
@@ -24,9 +26,11 @@ dataset/*
 # ==================== 评测结果 ====================
 # 评测输出（可选择性上传）
 eva_results/
+eva_results_*/
 fixed_eva_results/
 backup_eva_results/
 logs/
+logs_*/
 
 # ==================== Python ====================
 __pycache__/

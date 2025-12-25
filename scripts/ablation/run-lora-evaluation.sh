@@ -12,6 +12,7 @@ WORK_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$WORK_DIR"
 
 # ===================== 配置参数 =====================
+: "${PYTHON_EXE:=/root/miniconda3/envs/qwen-ft-env/bin/python}"
 : "${BASELINE_MODEL:=$WORK_DIR/models/Qwen3-VL-2B-Instruct}"
 : "${LORA_PRESETS:=light standard full}"
 : "${EVAL_STEPS:=1000 2000 3000 4000 5000}"
@@ -21,6 +22,10 @@ cd "$WORK_DIR"
 : "${DEVICE:=cuda:0}"
 : "${MAX_TASKS:=10}"                   # 与全量微调评估一致
 : "${NUM_EPISODES:=10}"                # 与全量微调评估一致
+
+# 转换为数组
+read -ra PRESET_ARRAY <<< "$LORA_PRESETS"
+read -ra STEPS_ARRAY <<< "$EVAL_STEPS"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$EVA_RESULTS_ROOT"
@@ -34,35 +39,49 @@ echo "评估步数: $EVAL_STEPS"
 echo "结果目录: $EVA_RESULTS_ROOT"
 echo "================================================"
 
-# ===================== 评估单个 checkpoint 的所有维度（并行） =====================
-evaluate_checkpoint_parallel() {
-    local preset=$1
-    local step=$2
-    local checkpoint_dir=$3
-    local model_name="lora_${preset}_step${step}"
-    local output_base="$EVA_RESULTS_ROOT/${preset}/step${step}"
+# ===================== 动态任务池逻辑 =====================
+MAX_PARALLEL=4  # 最大并行进程数
+
+# 收集所有待评估的任务
+tasks=()
+for preset in "${PRESET_ARRAY[@]}"; do
+    LORA_DIR="$WORK_DIR/models/lora_${preset}"
+    [ ! -d "$LORA_DIR" ] && continue
     
-    echo ""
-    echo "========================================"
-    echo "开始评估: $model_name (6 维度并行)"
-    echo "========================================"
-    
-    mkdir -p "$output_base"
-    
-    # 启动 6 个维度的并行评估
-    local pids=()
-    
-    for dim in "M&T" "CommonSense" "Semantic" "Spatial" "PhysicalLaw" "Complex"; do
-        local log_file="$LOG_DIR/${model_name}_${dim}.log"
-        local output_dir="$output_base/$dim"
+    for step in "${STEPS_ARRAY[@]}"; do
+        CHECKPOINT_DIR="${LORA_DIR}/checkpoint-${step}"
+        [ ! -d "$CHECKPOINT_DIR" ] && continue
+        [ ! -f "$CHECKPOINT_DIR/adapter_config.json" ] && continue
+        
+        for dim in "M&T" "CommenSence" "Semantic" "Spatial" "PhysicsLaw" "Complex"; do
+            tasks+=("$preset|$step|$dim|$CHECKPOINT_DIR")
+        done
+    done
+done
+
+echo "总计待评估任务数: ${#tasks[@]}"
+
+# 动态调度循环
+current_task=0
+total_tasks=${#tasks[@]}
+
+while [ $current_task -lt $total_tasks ] || [ $(jobs -r | wc -l) -gt 0 ]; do
+    # 当运行中的任务少于最大并行数，且还有待处理任务时
+    while [ $(jobs -r | wc -l) -lt $MAX_PARALLEL ] && [ $current_task -lt $total_tasks ]; do
+        # 解析任务参数
+        IFS='|' read -r preset step dim ckpt_dir <<< "${tasks[$current_task]}"
+        
+        model_name="lora_${preset}_step${step}"
+        output_dir="$EVA_RESULTS_ROOT/${preset}/step${step}/$dim"
+        log_file="$LOG_DIR/${model_name}_${dim}.log"
         mkdir -p "$output_dir"
         
-        echo "  启动 $dim 维度评估..."
+        echo "[启动] $model_name | 维度: $dim"
         
-        nohup python "$SCRIPT_DIR/run_vlm_evaluation_lora.py" \
+        "$PYTHON_EXE" "$SCRIPT_DIR/run_vlm_evaluation_lora.py" \
             --dimension "$dim" \
             --base_model_path "$BASELINE_MODEL" \
-            --lora_adapter_path "$checkpoint_dir" \
+            --lora_adapter_path "$ckpt_dir" \
             --model_name "$model_name" \
             --data_path "$DATA_PATH" \
             --output_dir "$output_dir" \
@@ -70,55 +89,12 @@ evaluate_checkpoint_parallel() {
             --max_tasks "$MAX_TASKS" \
             --num_episodes "$NUM_EPISODES" > "$log_file" 2>&1 &
         
-        pids+=($!)
+        current_task=$((current_task + 1))
+        sleep 2 # 稍微错开启动时间，避免瞬间显存峰值
     done
     
-    echo "  进程 IDs: ${pids[*]}"
-    echo "  等待所有维度评估完成..."
-    
-    # 等待所有维度完成
-    for pid in "${pids[@]}"; do
-        wait $pid || echo "  [警告] 进程 $pid 退出异常"
-    done
-    
-    echo "  [完成] $model_name 所有维度评估完成"
-}
-
-# ===================== 主循环：预设串行，checkpoint 串行，维度并行 =====================
-PRESET_ARRAY=($LORA_PRESETS)
-STEPS_ARRAY=($EVAL_STEPS)
-
-for preset in "${PRESET_ARRAY[@]}"; do
-    echo ""
-    echo "================================================"
-    echo "开始评估 LoRA 预设: $preset"
-    echo "================================================"
-    
-    LORA_DIR="$WORK_DIR/output_lora_${preset}"
-    
-    if [ ! -d "$LORA_DIR" ]; then
-        echo "[跳过] LoRA 目录不存在: $LORA_DIR"
-        continue
-    fi
-    
-    for step in "${STEPS_ARRAY[@]}"; do
-        CHECKPOINT_DIR="${LORA_DIR}/checkpoint-${step}"
-        
-        if [ ! -d "$CHECKPOINT_DIR" ]; then
-            echo "[跳过] checkpoint 不存在: $CHECKPOINT_DIR"
-            continue
-        fi
-        
-        if [ ! -f "$CHECKPOINT_DIR/adapter_config.json" ]; then
-            echo "[跳过] 不是有效的 LoRA checkpoint: $CHECKPOINT_DIR"
-            continue
-        fi
-        
-        evaluate_checkpoint_parallel "$preset" "$step" "$CHECKPOINT_DIR"
-    done
-    
-    echo ""
-    echo "[完成] $preset 预设所有 checkpoint 评估完成"
+    # 等待一段时间再检查
+    sleep 5
 done
 
 echo ""

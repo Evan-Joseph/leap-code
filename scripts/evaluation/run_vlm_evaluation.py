@@ -48,8 +48,13 @@ class CustomVLMEvaluator(VLMEvaluator):
         if not os.path.exists(save_path):
             os.makedirs(save_path, exist_ok=True)
             
+        # 构造模型特定的保存目录名，包含 few-shot 信息
+        suffix = f"_{few_shot_num}shot" if few_shot_num > 0 else ""
+        if with_CoT:
+            suffix += "_CoT"
+        
         # 返回模型特定的保存路径
-        return os.path.join(save_path, vlm_name)
+        return os.path.join(save_path, f"{vlm_name}{suffix}")
     
     def evaluate(self, vlm, task_list=None, save_interval=5, few_shot_num=0, with_CoT=False, eval_dim=None):
         """重写evaluate方法，确保正确传递eval_dim参数"""
@@ -235,9 +240,10 @@ class Qwen3VLAdapter(BaseVLM):
     Qwen3-VL-2B-Instruct适配器
     完全兼容VLABench的BaseVLM接口
     """
-    def __init__(self, model_path: str, device: str = "cuda:0", batch_size: int = 4) -> None:
+    def __init__(self, model_path: str, device: str = "cuda:0", batch_size: int = 4, baseline_path: str = None) -> None:
         # 保存配置
         self.model_path = model_path
+        self.baseline_path = baseline_path
         self.device = device
         self.batch_size = batch_size
         super().__init__()
@@ -282,6 +288,55 @@ class Qwen3VLAdapter(BaseVLM):
         
         # 加载处理器
         self.processor = AutoProcessor.from_pretrained(self.model_path)
+        
+        # 优先沿用 Baseline 的模板
+        baseline_template = None
+        if self.baseline_path and os.path.exists(self.baseline_path):
+            bt_path = os.path.join(self.baseline_path, "chat_template.json")
+            if os.path.exists(bt_path):
+                try:
+                    with open(bt_path, 'r') as f:
+                        data = json.load(f)
+                        baseline_template = data.get("chat_template")
+                        if baseline_template:
+                            print(f"{Fore.GREEN}✓ 已成功沿用 Baseline 模板{Style.RESET_ALL}")
+                except:
+                    pass
+
+        if baseline_template:
+            self.processor.chat_template = baseline_template
+            if hasattr(self.processor, 'tokenizer'):
+                self.processor.tokenizer.chat_template = baseline_template
+        else:
+            # 如果没有 baseline 模板，尝试从当前模型加载或使用兜底
+            if not hasattr(self.processor, 'chat_template') or self.processor.chat_template is None:
+                chat_template_path = os.path.join(self.model_path, "chat_template.json")
+                if os.path.exists(chat_template_path):
+                    with open(chat_template_path, 'r') as f:
+                        template_data = json.load(f)
+                        if isinstance(template_data, dict) and "chat_template" in template_data:
+                            self.processor.chat_template = template_data["chat_template"]
+                            if hasattr(self.processor, 'tokenizer'):
+                                self.processor.tokenizer.chat_template = template_data["chat_template"]
+                
+            # 兜底模板（支持图像）
+            if not hasattr(self.processor, 'chat_template') or self.processor.chat_template is None:
+                print(f"{Fore.YELLOW}警告: 未找到有效模板，使用内置兜底模板...{Style.RESET_ALL}")
+                default_template = (
+                    "{% for message in messages %}"
+                    "{{ '<|im_start|>' + message['role'] + '\\n' }}"
+                    "{% for content in message['content'] %}"
+                    "{% if content['type'] == 'text' %}{{ content['text'] }}"
+                    "{% elif content['type'] == 'image' %}<|vision_start|><|image_pad|><|vision_end|>"
+                    "{% endif %}"
+                    "{% endfor %}"
+                    "{{ '<|im_end|>\\n' }}"
+                    "{% endfor %}"
+                    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
+                )
+                self.processor.chat_template = default_template
+                if hasattr(self.processor, 'tokenizer'):
+                    self.processor.tokenizer.chat_template = default_template
     
     def print_memory_usage(self, prefix: str = ""):
         """打印当前显存使用情况"""
@@ -364,7 +419,10 @@ class Qwen3VLAdapter(BaseVLM):
             output = {"origin_output": "", "format_error": "inference_error"}
         
         # 清理中间变量
-        del inputs, generated_ids, generated_ids_trimmed
+        if 'inputs' in locals(): del inputs
+        if 'generated_ids' in locals(): del generated_ids
+        if 'generated_ids_trimmed' in locals(): del generated_ids_trimmed
+        
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
@@ -377,7 +435,7 @@ class Qwen3VLAdapter(BaseVLM):
         return os.path.basename(self.model_path)
 
 
-def discover_models(baseline_path: str, checkpoints_dir: str, max_checkpoints: int = None):
+def discover_models(baseline_path: str, checkpoints_dir: str, max_checkpoints: int = None, skip_baseline: bool = False):
     """自动发现所有待评估的模型"""
     import glob
     import re
@@ -386,7 +444,7 @@ def discover_models(baseline_path: str, checkpoints_dir: str, max_checkpoints: i
     model_names = []
     
     # 添加基线模型
-    if os.path.exists(baseline_path):
+    if not skip_baseline and os.path.exists(baseline_path):
         model_paths.append(baseline_path)
         model_names.append("Baseline")
         print(f"{Fore.GREEN}✓ 发现基线模型: {baseline_path}{Style.RESET_ALL}")
@@ -494,7 +552,8 @@ def single_model_evaluate(args, model_name=None):
             vlm = Qwen3VLAdapter(
                 args.model_path, 
                 device=args.device,
-                batch_size=args.batch_size
+                batch_size=args.batch_size,
+                baseline_path=args.baseline_model
             )
             
             # 如果提供了model_name参数，则使用它作为模型名称
@@ -568,7 +627,8 @@ def single_model_evaluate(args, model_name=None):
     vlm = Qwen3VLAdapter(
         args.model_path, 
         device=args.device,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        baseline_path=args.baseline_model
     )
     
     # 如果提供了model_name参数，则使用它作为模型名称
@@ -628,7 +688,8 @@ def batch_evaluate(args):
     model_paths, model_names = discover_models(
         args.baseline_model,
         args.checkpoints_dir,
-        args.max_checkpoints
+        args.max_checkpoints,
+        skip_baseline=args.skip_baseline
     )
     
     if not model_paths:
@@ -706,7 +767,7 @@ def batch_evaluate(args):
 def main():
     parser = argparse.ArgumentParser(description="简化的VLM任务规划能力评估系统")
     parser.add_argument("--dimension", type=str, default="M&T", 
-                        choices=["M&T", "CommonSense", "Semantic", "Spatial", "PhysicalLaw", "Complex", "baseline"],
+                        choices=["M&T", "CommenSence", "Semantic", "Spatial", "PhysicsLaw", "Complex", "baseline"],
                         help="评估维度")
     parser.add_argument("--model_path", type=str, default="./models/Qwen3-VL-2B-Instruct",
                         help="模型路径")
@@ -732,6 +793,8 @@ def main():
                         help="Few-shot样本数量，0表示zero-shot，1表示one-shot，默认0")
     parser.add_argument("--with-cot", action="store_true", dest="with_cot",
                         help="是否使用Chain-of-Thought推理，默认不使用")
+    parser.add_argument("--skip-baseline", action="store_true",
+                        help="批量模式下跳过基线模型评估")
     
     args = parser.parse_args()
 

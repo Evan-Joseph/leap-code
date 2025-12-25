@@ -30,11 +30,11 @@ nohup python scripts/evaluation/run_vlm_evaluation.py --batch_mode --dimension "
 PID_MT=$!
 echo "M&T维度评估进程ID: $PID_MT"
 
-# CommenSense维度评估
-echo "启动CommonSense维度评估..."
-nohup python scripts/evaluation/run_vlm_evaluation.py --batch_mode --dimension "CommonSense" --baseline_model "$BASELINE_MODEL" --checkpoints_dir "$CHECKPOINTS_DIR" --max_checkpoints $MAX_CHECKPOINTS --max_tasks $MAX_TASKS --num_episodes $NUM_EPISODES --data_path "$DATA_PATH" --device "$DEVICE" > "$LOG_DIR/log_commonsense.log" 2>&1 &
-PID_CommonSense=$!
-echo "CommonSense维度评估进程ID: $PID_CommonSense"
+# CommenSence维度评估
+echo "启动CommenSence维度评估..."
+nohup python scripts/evaluation/run_vlm_evaluation.py --batch_mode --dimension "CommenSence" --baseline_model "$BASELINE_MODEL" --checkpoints_dir "$CHECKPOINTS_DIR" --max_checkpoints $MAX_CHECKPOINTS --max_tasks $MAX_TASKS --num_episodes $NUM_EPISODES --data_path "$DATA_PATH" --device "$DEVICE" > "$LOG_DIR/log_commonsense.log" 2>&1 &
+PID_CommenSence=$!
+echo "CommenSence维度评估进程ID: $PID_CommenSence"
 
 # Semantic维度评估
 echo "启动Semantic维度评估..."
@@ -48,11 +48,11 @@ nohup python scripts/evaluation/run_vlm_evaluation.py --batch_mode --dimension "
 PID_Spatial=$!
 echo "Spatial维度评估进程ID: $PID_Spatial"
 
-# PhysicalLaw维度评估
-echo "启动PhysicalLaw维度评估..."
-nohup python scripts/evaluation/run_vlm_evaluation.py --batch_mode --dimension "PhysicalLaw" --baseline_model "$BASELINE_MODEL" --checkpoints_dir "$CHECKPOINTS_DIR" --max_checkpoints $MAX_CHECKPOINTS --max_tasks $MAX_TASKS --num_episodes $NUM_EPISODES --data_path "$DATA_PATH" --device "$DEVICE" > "$LOG_DIR/log_physics.log" 2>&1 &
-PID_PhysicalLaw=$!
-echo "PhysicalLaw维度评估进程ID: $PID_PhysicalLaw"
+# PhysicsLaw维度评估
+echo "启动PhysicsLaw维度评估..."
+nohup python scripts/evaluation/run_vlm_evaluation.py --batch_mode --dimension "PhysicsLaw" --baseline_model "$BASELINE_MODEL" --checkpoints_dir "$CHECKPOINTS_DIR" --max_checkpoints $MAX_CHECKPOINTS --max_tasks $MAX_TASKS --num_episodes $NUM_EPISODES --data_path "$DATA_PATH" --device "$DEVICE" > "$LOG_DIR/log_physics.log" 2>&1 &
+PID_PhysicsLaw=$!
+echo "PhysicsLaw维度评估进程ID: $PID_PhysicsLaw"
 
 # Complex维度评估
 echo "启动Complex维度评估..."
@@ -62,10 +62,10 @@ echo "Complex维度评估进程ID: $PID_Complex"
 
 # 保存所有进程ID到文件
 echo "$PID_MT" > "$LOG_DIR/pid_mt.txt"
-echo "$PID_CommonSense" > "$LOG_DIR/pid_commonsense.txt"
+echo "$PID_CommenSence" > "$LOG_DIR/pid_commonsense.txt"
 echo "$PID_Semantic" > "$LOG_DIR/pid_semantic.txt"
 echo "$PID_Spatial" > "$LOG_DIR/pid_spatial.txt"
-echo "$PID_PhysicalLaw" > "$LOG_DIR/pid_physics.txt"
+echo "$PID_PhysicsLaw" > "$LOG_DIR/pid_physics.txt"
 echo "$PID_Complex" > "$LOG_DIR/pid_complex.txt"
 
 echo "所有评估进程已启动!"
