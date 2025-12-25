@@ -544,6 +544,11 @@ def main():
     
     if hasattr(model, 'config'):
         model.config.use_cache = False
+    
+    # 开启梯度检查点时，LoRA 需要开启此项以确保梯度流
+    if args.gradient_checkpointing:
+        model.enable_input_require_grads()
+
 
     # 构建 LoRA 配置
     rich_print(f"[bold blue]配置 LoRA 适配器 (预设: {args.lora_preset})...[/bold blue]")
