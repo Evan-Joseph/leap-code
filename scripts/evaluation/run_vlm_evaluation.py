@@ -19,8 +19,9 @@ from pathlib import Path
 
 # 设置仓库根路径（脚本位置的上两级为 repo 根），并将 VLABench 根加入环境
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EVA_RESULTS_ROOT = REPO_ROOT / 'eva_results'
-BACKUP_EVA_RESULTS_ROOT = REPO_ROOT / 'backup_eva_results'
+# 默认结果根目录改为 results
+EVA_RESULTS_ROOT = REPO_ROOT / 'results'
+BACKUP_EVA_RESULTS_ROOT = REPO_ROOT / 'results' / 'backup'
 vlabench_root = REPO_ROOT / 'VLABench' / 'VLABench'
 os.environ['VLABENCH_ROOT'] = str(vlabench_root)
 sys.path.insert(0, str(REPO_ROOT / 'VLABench'))
@@ -35,25 +36,14 @@ class CustomVLMEvaluator(VLMEvaluator):
     """自定义评估器，修复get_result_save_path方法"""
     
     def get_result_save_path(self, vlm_name, few_shot_num=0, with_CoT=False, eval_dim=None):
-        """重写get_result_save_path方法，添加eval_dim参数的默认值"""
-        # 如果提供了eval_dim，使用它；否则使用默认值
-        if eval_dim is None:
-            eval_dim = "default"
-            
-        # 创建基于eval_dim的固定保存路径
-        save_path = os.path.join(str(EVA_RESULTS_ROOT), eval_dim)
-        
-        # 确保目录存在
-        if not os.path.exists(save_path):
-            os.makedirs(save_path, exist_ok=True)
-            
+        """重写get_result_save_path方法，使用初始化时传入的save_path"""
         # 构造模型特定的保存目录名，包含 few-shot 信息
         suffix = f"_{few_shot_num}shot" if few_shot_num > 0 else ""
         if with_CoT:
             suffix += "_CoT"
         
-        # 返回模型特定的保存路径
-        return os.path.join(save_path, f"{vlm_name}{suffix}")
+        # 返回模型特定的保存路径，基于 self.save_path (即维度目录)
+        return os.path.join(self.save_path, f"{vlm_name}{suffix}")
     
     def evaluate(self, vlm, task_list=None, save_interval=5, few_shot_num=0, with_CoT=False, eval_dim=None):
         """重写evaluate方法，确保正确传递eval_dim参数"""
@@ -556,37 +546,27 @@ def discover_models(baseline_path: str, checkpoints_dir: str, max_checkpoints: i
     return model_paths, model_names
 
 
-def prepare_dimension_save_path(dimension: str, model_name: str = None):
-    """为每个维度准备保存路径，如果存在且模型名称相同则备份到评估结果文件夹外面
-
-    路径基于仓库根（REPO_ROOT），避免依赖当前工作目录。
+def prepare_dimension_save_path(dimension: str, model_name: str = None, base_results_dir: str = None):
+    """为每个维度准备保存路径。
+    
+    不再自动备份，以支持断点续传。
     """
-    base_dir = str(EVA_RESULTS_ROOT)
+    if base_results_dir:
+        base_dir = base_results_dir
+    else:
+        base_dir = str(EVA_RESULTS_ROOT)
+        
     dimension_dir = os.path.join(base_dir, dimension)
 
-    # 确保基础目录存在
-    os.makedirs(base_dir, exist_ok=True)
-    
-    # 如果提供了模型名称，检查是否已存在该模型的结果
-    if model_name:
-        model_output_file = os.path.join(dimension_dir, model_name, "output.json")
-        # 如果该模型的结果已存在，则备份
-        if os.path.exists(model_output_file):
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            os.makedirs(BACKUP_EVA_RESULTS_ROOT, exist_ok=True)
-            backup_dir = str(BACKUP_EVA_RESULTS_ROOT / f"{dimension}_{model_name}_{timestamp}")
-            print(f"{Fore.YELLOW}发现已存在的模型结果，备份到: {backup_dir}{Style.RESET_ALL}")
-            shutil.move(os.path.join(dimension_dir, model_name), backup_dir)
-    elif os.path.exists(dimension_dir) and model_name is None:
-        # 只有在没有提供模型名称且维度目录存在时才备份整个维度目录
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        os.makedirs(BACKUP_EVA_RESULTS_ROOT, exist_ok=True)
-        backup_dir = str(BACKUP_EVA_RESULTS_ROOT / f"{dimension}_{timestamp}")
-        print(f"{Fore.YELLOW}发现已存在的维度目录，备份到: {backup_dir}{Style.RESET_ALL}")
-        shutil.move(dimension_dir, backup_dir)
-    
-    # 创建新的维度目录
+    # 确保目录存在
     os.makedirs(dimension_dir, exist_ok=True)
+    
+    if model_name:
+        model_dir = os.path.join(dimension_dir, model_name)
+        os.makedirs(model_dir, exist_ok=True)
+        if os.path.exists(os.path.join(model_dir, "output.json")):
+            print(f"{Fore.GREEN}发现已存在的模型结果，将尝试断点续传: {model_dir}{Style.RESET_ALL}")
+            
     return dimension_dir
 
 
@@ -715,7 +695,7 @@ def single_model_evaluate(args, model_name=None):
         vlm.name = model_name
     
     # 为每个维度准备保存路径，不使用时间戳
-    save_path = prepare_dimension_save_path(args.dimension, vlm.name)
+    save_path = prepare_dimension_save_path(args.dimension, vlm.name, args.output_dir)
     
     # 创建评估器
     evaluator = CustomVLMEvaluator(
@@ -786,8 +766,12 @@ def batch_evaluate(args):
     print(f"任务限制: {task_info}")
     print(f"{'='*60}")
     
-    # 为整个批量评估准备一个共享的维度目录（不备份，因为每个模型会单独处理）
-    dimension_save_path = os.path.join(str(EVA_RESULTS_ROOT), args.dimension)
+    # 为整个批量评估准备一个共享的维度目录
+    if args.output_dir:
+        dimension_save_path = os.path.join(args.output_dir, args.dimension)
+    else:
+        dimension_save_path = os.path.join(str(EVA_RESULTS_ROOT), args.dimension)
+        
     os.makedirs(dimension_save_path, exist_ok=True)
     
     all_results = []
@@ -876,6 +860,8 @@ def main():
                         help="批量模式下跳过基线模型评估")
     parser.add_argument("--quantization", type=str, default=None, choices=["4bit", "8bit"],
                         help="模型量化方式 (仅支持 MiniCPM-V)")
+    parser.add_argument("--output_dir", type=str, default=None,
+                        help="结果保存的根目录 (例如 results/internvl2.5_2b_0shot)")
     
     args = parser.parse_args()
 

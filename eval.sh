@@ -21,8 +21,11 @@ case $MODEL_KEY in
     "minicpm")
         bash scripts/shell/eval_minicpm_v2.6_0shot_4bit_parallel.sh
         ;;
+    "monitor")
+        python scripts/utils/monitor_evaluation.py
+        ;;
     *)
-        echo "Usage: bash eval.sh {qwen3_2b_0shot|qwen3_2b_1shot|qwen3_4b|internvl|minicpm}"
+        echo "Usage: bash eval.sh {qwen3_2b_0shot|qwen3_2b_1shot|qwen3_4b|internvl|minicpm|monitor}"
         exit 1
         ;;
 esac

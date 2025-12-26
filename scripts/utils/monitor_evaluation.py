@@ -7,17 +7,9 @@ from rich.panel import Panel
 from rich.console import Console
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.layout import Layout
+from pathlib import Path
 
 console = Console()
-
-LOG_FILES = [
-    "/root/autodl-tmp/leap-code/logs/minicpm_parallel/mt.log",
-    "/root/autodl-tmp/leap-code/logs/minicpm_parallel/commonsense.log",
-    "/root/autodl-tmp/leap-code/logs/minicpm_parallel/semantic.log",
-    "/root/autodl-tmp/leap-code/logs/minicpm_parallel/spatial.log",
-    "/root/autodl-tmp/leap-code/logs/minicpm_parallel/physics.log",
-    "/root/autodl-tmp/leap-code/logs/minicpm_parallel/complex.log"
-]
 
 def get_gpu_info():
     try:
@@ -74,29 +66,53 @@ def get_progress_from_log(log_file):
     except Exception as e:
         return 0, 0, "读取错误", "N/A", str(e)
 
+def get_latest_log_files():
+    """动态获取最近活跃的日志文件列表"""
+    logs_root = Path("/root/autodl-tmp/leap-code/logs")
+    if not logs_root.exists():
+        return []
+    
+    # 获取所有子目录
+    subdirs = [d for d in logs_root.iterdir() if d.is_dir()]
+    if not subdirs:
+        return []
+    
+    # 按修改时间排序，取最新的一个
+    latest_dir = max(subdirs, key=lambda d: d.stat().st_mtime)
+    
+    # 获取该目录下所有的 .log 文件
+    log_files = sorted(list(latest_dir.glob("*.log")))
+    return [str(f) for f in log_files]
+
 def main():
     with Live(console=console, refresh_per_second=1, vertical_overflow="visible") as live:
         while True:
             mem, util = get_gpu_info()
             
+            # 动态获取日志文件
+            log_files = get_latest_log_files()
+            
             table = Table(show_header=True, header_style="bold magenta", box=None)
-            table.add_column("任务组", style="white", width=10)
+            table.add_column("任务", style="white", width=15)
             table.add_column("当前维度", style="cyan", width=15)
             table.add_column("进度", style="green", width=15)
             table.add_column("样本数", style="yellow", width=12)
             table.add_column("剩余时间 (ETA)", style="bold red", width=20)
             
-            for i, log_file in enumerate(LOG_FILES):
-                current, total, status, dim, eta = get_progress_from_log(log_file)
-                # 优化显示：如果已完成，进度显示 100%
-                display_status = status if "%" in status else ("100%" if status == "已完成" else status)
-                table.add_row(
-                    f"Group {i+1}",
-                    dim, 
-                    display_status,
-                    f"{current}/{total}",
-                    eta
-                )
+            if not log_files:
+                table.add_row("无活跃任务", "-", "-", "-", "-")
+            else:
+                for log_file in log_files:
+                    current, total, status, dim, eta = get_progress_from_log(log_file)
+                    # 优化显示：如果已完成，进度显示 100%
+                    display_status = status if "%" in status else ("100%" if status == "已完成" else status)
+                    table.add_row(
+                        Path(log_file).stem.upper(),
+                        dim, 
+                        display_status,
+                        f"{current}/{total}",
+                        eta
+                    )
             
             # 组合面板，减少空白
             summary_text = f"[bold green]GPU利用率:[/bold green] {util}  |  [bold blue]显存占用:[/bold blue] {mem}"

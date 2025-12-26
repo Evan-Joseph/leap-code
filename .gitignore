@@ -25,10 +25,9 @@ dataset/*
 
 # ==================== 评测结果 ====================
 # 评测输出（可选择性上传）
+results/
 eva_results/
 eva_results_*/
-fixed_eva_results/
-backup_eva_results/
 logs/
 logs_*/
 

@@ -13,10 +13,10 @@
 - **`logs/`**: 统一存放所有运行日志。
     - 评估日志建议命名：`logs/eval_<model>_<dimension>_<date>.log`
     - 训练日志建议命名：`logs/train_<model>_<date>.log`
-- **`eva_results/`**: 存放正式的评估结果。
+- **`results/`**: 统一存放所有评估结果。
+    - 结构：`results/<model_config>/<dimension>/`
+    - `results/backup/`: 存放历史或备份的评估结果。
 - **`eval.sh`**: 根目录下的统一评估入口脚本。
-    - 结构：`eva_results/<dimension>/<model_name>/`
-- **`backup_eva_results/`**: 存放历史或备份的评估结果。
 - **`models/`**: 存放模型权重文件。
 - **`dataset/`**: 存放原始数据集。
 
@@ -28,7 +28,7 @@
 ## 3. 日志与结果管理
 
 - **禁止乱拉屎**: 严禁在根目录直接生成 `.log`、`.json`、`.tar.gz` 或 `.png` 等文件。
-- **自动归档**: 脚本应尽量支持将输出重定向或直接写入指定的 `logs/` 或 `eva_results/` 目录。
+- **自动归档**: 脚本应尽量支持将输出重定向或直接写入指定的 `logs/` 或 `results/` 目录。
 - **清理习惯**: 任务完成后，应及时清理不再需要的 `tmp_` 文件或将其移至专门的备份目录。
 
 ## 4. 开发流程规范

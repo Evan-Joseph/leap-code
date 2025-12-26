@@ -16,7 +16,7 @@ python scripts/evaluation/run_vlm_output.py \
   --data_file ./data/blind_10.jsonl \
   --baseline_model ./models/Qwen3-VL-2B-Instruct \
   --checkpoints_dir ./output \
-  --save_dir ./eva_results/blind_10 \
+  --save_dir ./results/blind_10 \
   --device cuda:0
 
 可选：
@@ -208,7 +208,7 @@ def main():
     parser.add_argument("--data_file", type=str, default="./data/blind_10.jsonl", help="jsonl 数据文件路径")
     parser.add_argument("--baseline_model", type=str, default="./models/Qwen3-VL-2B-Instruct", help="Baseline 模型路径")
     parser.add_argument("--checkpoints_dir", type=str, default="./output", help="checkpoints 目录")
-    parser.add_argument("--save_dir", type=str, default="./eva_results/blind_10", help="CSV 保存目录")
+    parser.add_argument("--save_dir", type=str, default="./results/blind_10", help="CSV 保存目录")
     parser.add_argument("--device", type=str, default="cuda:0", help="推理设备标识")
     parser.add_argument("--max_checkpoints", type=lambda x: None if x == 'None' else int(x), default=None, help="最多评估多少个ckpt，None表示全部")
     parser.add_argument("--max_new_tokens", type=int, default=256)

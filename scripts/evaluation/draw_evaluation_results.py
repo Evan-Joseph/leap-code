@@ -24,14 +24,14 @@ from config import WorkspaceConfig
 matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 matplotlib.rcParams['axes.unicode_minus'] = False
 
-# 使用配置管理评估结果目录（优先使用配置，失败则回退到工作区下的 eva_results）
+# 使用配置管理评估结果目录（优先使用配置，失败则回退到工作区下的 results）
 try:
     EVAL_DIR = str(WorkspaceConfig.RESULTS_ROOT)
 except Exception:
-    EVAL_DIR = str(Path(__file__).resolve().parents[2] / "eva_results")
+    EVAL_DIR = str(Path(__file__).resolve().parents[2] / "results")
 
 # 进一步健壮性：若配置路径不存在但工作区路径存在，则采用工作区路径
-workspace_eval_dir = str(Path(__file__).resolve().parents[2] / "eva_results")
+workspace_eval_dir = str(Path(__file__).resolve().parents[2] / "results")
 if not os.path.isdir(EVAL_DIR) and os.path.isdir(workspace_eval_dir):
     EVAL_DIR = workspace_eval_dir
     print(f"[Info] RESULTS_ROOT not available; fallback to {EVAL_DIR}")
@@ -88,7 +88,7 @@ def load_evaluation_results():
             detected_dimensions.append(entry)
 
     # 维度排序：使用预定义顺序提升可读性
-    preferred_order = ['M&T', 'Semantic', 'Spatial', 'PhysicalLaw', 'Complex', 'CommonSense']
+    preferred_order = ['M&T', 'Semantic', 'Spatial', 'PhysicsLaw', 'Complex', 'CommenSence']
     dimensions = [d for d in preferred_order if d in detected_dimensions] + [d for d in detected_dimensions if d not in preferred_order]
 
     for d in dimensions:

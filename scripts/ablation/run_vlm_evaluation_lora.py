@@ -19,7 +19,7 @@ from pathlib import Path
 
 # 设置仓库根路径
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EVA_RESULTS_ROOT = REPO_ROOT / 'eva_results_lora'
+EVA_RESULTS_ROOT = REPO_ROOT / 'results' / 'lora'
 vlabench_root = REPO_ROOT / 'VLABench' / 'VLABench'
 os.environ['VLABENCH_ROOT'] = str(vlabench_root)
 sys.path.insert(0, str(REPO_ROOT / 'VLABench'))

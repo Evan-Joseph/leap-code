@@ -4,11 +4,11 @@
 """
 Blind-10 LLM-as-a-Judge visualization.
 
-Reads the latest score CSV under eva_results/blind_10 (blind10_score_YYYYMMDD_HHMMSS.csv)
+Reads the latest score CSV under results/blind_10 (blind10_score_YYYYMMDD_HHMMSS.csv)
 and generates comparison charts per model: average final_score, and per-dimension
 scores (completeness, logical_sequence, hallucination_redundancy, granularity).
 
-Outputs PNGs to eva_results/blind_10/:
+Outputs PNGs to results/blind_10/:
 - blind10_models_final_score.png
 - blind10_models_dimension_scores.png
 - blind10_models_improvement_vs_baseline.png
@@ -27,7 +27,7 @@ matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 matplotlib.rcParams['axes.unicode_minus'] = False
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-EVAL_DIR = WORKSPACE_ROOT / "eva_results" / "blind_10"
+EVAL_DIR = WORKSPACE_ROOT / "results" / "blind_10"
 
 
 def find_latest_score_csv() -> Path:

@@ -5,7 +5,7 @@
 Analyze output results using LLM-as-a-Judge and export scores to CSV.
 
 Inputs:
-- Find the latest outputs CSV under eva_results/blind_10/ named like
+- Find the latest outputs CSV under results/blind_10/ named like
   blind10_outputs_YYYYMMDD_HHMMSS.csv (or use --input-csv to specify).
 
 Outputs:
@@ -475,7 +475,7 @@ def process_csv(
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="LLM-as-a-Judge evaluator for blind_10 outputs")
-    parser.add_argument("--input-csv", type=str, default="", help="Path to blind10_outputs_*.csv; default: pick latest in eva_results/blind_10/")
+    parser.add_argument("--input-csv", type=str, default="", help="Path to blind10_outputs_*.csv; default: pick latest in results/blind_10/")
     parser.add_argument("--api-base", type=str, default=DEFAULT_API_BASE, help="OpenAI-compatible API base (default: https://jeniya.top/v1)")
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Model name (default: gpt-4o-mini)")
     parser.add_argument("--max-samples", type=int, default=None, help="Limit number of rows for a quick run")
@@ -499,7 +499,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         workspace_root = Path(args.workspace_root).resolve()
     else:
         workspace_root = Path(__file__).resolve().parents[2]
-    eva_dir = workspace_root / "eva_results" / "blind_10"
+    eva_dir = workspace_root / "results" / "blind_10"
 
     input_csv_path: Path
     if args.input_csv:
