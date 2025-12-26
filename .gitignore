@@ -8,7 +8,7 @@ tmp_LEAP论文.md
 # 这些文件太大，不应上传到 GitHub
 models/
 output/
-output_lora_*/
+output_*/
 
 # ==================== 数据文件 ====================
 # 训练数据和评测数据集

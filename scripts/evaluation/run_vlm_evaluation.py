@@ -15,7 +15,6 @@ import traceback
 from datetime import datetime
 import torch
 from PIL import Image
-from colorama import Fore, Style
 from pathlib import Path
 
 # 设置仓库根路径（脚本位置的上两级为 repo 根），并将 VLABench 根加入环境
@@ -235,61 +234,37 @@ except ImportError:
         BRIGHT = ""
 
 
-class Qwen3VLAdapter(BaseVLM):
+class QwenVLAdapter(BaseVLM):
     """
-    Qwen3-VL-2B-Instruct适配器
-    完全兼容VLABench的BaseVLM接口
+    Qwen-VL 系列适配器 (支持 Qwen2-VL, Qwen2.5-VL, Qwen3-VL)
     """
     def __init__(self, model_path: str, device: str = "cuda:0", batch_size: int = 4, baseline_path: str = None) -> None:
-        # 保存配置
         self.model_path = model_path
         self.baseline_path = baseline_path
         self.device = device
         self.batch_size = batch_size
         super().__init__()
         
-        # 显存信息
         self.total_gpu_memory = torch.cuda.get_device_properties(device).total_memory / 1024**3 if torch.cuda.is_available() else 0
         
-        # 打印模型加载信息
-        print(f"{Fore.YELLOW}正在加载模型: {model_path}")
-        print(f"目标设备: {device}")
-        if torch.cuda.is_available():
-            print(f"GPU总显存: {self.total_gpu_memory:.1f} GB")
-            print(f"批次大小: {batch_size}")
-        print(f"{Style.RESET_ALL}")
-        
-        # 加载模型
+        print(f"{Fore.YELLOW}正在加载 Qwen-VL 模型: {model_path}")
         self._load_model()
         self.model.eval()
-        
-        # 显示加载后显存使用
         self.print_memory_usage("模型加载完成")
-        if torch.cuda.is_available():
-            print(f"{Fore.GREEN}✓ 模型设备: {next(self.model.parameters()).device}{Style.RESET_ALL}")
     
     def _load_model(self):
-        """加载模型"""
         from transformers import AutoModelForImageTextToText, AutoProcessor
-        
-        # 使用BF16精度
         print(f"{Fore.GREEN}✓ 使用BF16精度{Style.RESET_ALL}")
         
-        try:
-            self.model = AutoModelForImageTextToText.from_pretrained(
-                self.model_path,
-                torch_dtype=torch.bfloat16,
-                trust_remote_code=True,
-                device_map="auto"
-            )
-        except Exception as e:
-            print(f"{Fore.RED}模型加载失败: {e}{Style.RESET_ALL}")
-            raise
-        
-        # 加载处理器
+        self.model = AutoModelForImageTextToText.from_pretrained(
+            self.model_path,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+            device_map="auto"
+        )
         self.processor = AutoProcessor.from_pretrained(self.model_path)
         
-        # 优先沿用 Baseline 的模板
+        # 尝试加载模板
         baseline_template = None
         if self.baseline_path and os.path.exists(self.baseline_path):
             bt_path = os.path.join(self.baseline_path, "chat_template.json")
@@ -300,69 +275,29 @@ class Qwen3VLAdapter(BaseVLM):
                         baseline_template = data.get("chat_template")
                         if baseline_template:
                             print(f"{Fore.GREEN}✓ 已成功沿用 Baseline 模板{Style.RESET_ALL}")
-                except:
-                    pass
+                except: pass
 
         if baseline_template:
             self.processor.chat_template = baseline_template
-            if hasattr(self.processor, 'tokenizer'):
-                self.processor.tokenizer.chat_template = baseline_template
-        else:
-            # 如果没有 baseline 模板，尝试从当前模型加载或使用兜底
-            if not hasattr(self.processor, 'chat_template') or self.processor.chat_template is None:
-                chat_template_path = os.path.join(self.model_path, "chat_template.json")
-                if os.path.exists(chat_template_path):
-                    with open(chat_template_path, 'r') as f:
-                        template_data = json.load(f)
-                        if isinstance(template_data, dict) and "chat_template" in template_data:
-                            self.processor.chat_template = template_data["chat_template"]
-                            if hasattr(self.processor, 'tokenizer'):
-                                self.processor.tokenizer.chat_template = template_data["chat_template"]
-                
-            # 兜底模板（支持图像）
-            if not hasattr(self.processor, 'chat_template') or self.processor.chat_template is None:
-                print(f"{Fore.YELLOW}警告: 未找到有效模板，使用内置兜底模板...{Style.RESET_ALL}")
-                default_template = (
-                    "{% for message in messages %}"
-                    "{{ '<|im_start|>' + message['role'] + '\\n' }}"
-                    "{% for content in message['content'] %}"
-                    "{% if content['type'] == 'text' %}{{ content['text'] }}"
-                    "{% elif content['type'] == 'image' %}<|vision_start|><|image_pad|><|vision_end|>"
-                    "{% endif %}"
-                    "{% endfor %}"
-                    "{{ '<|im_end|>\\n' }}"
-                    "{% endfor %}"
-                    "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
-                )
-                self.processor.chat_template = default_template
-                if hasattr(self.processor, 'tokenizer'):
-                    self.processor.tokenizer.chat_template = default_template
+        elif not hasattr(self.processor, 'chat_template') or self.processor.chat_template is None:
+            chat_template_path = os.path.join(self.model_path, "chat_template.json")
+            if os.path.exists(chat_template_path):
+                with open(chat_template_path, 'r') as f:
+                    template_data = json.load(f)
+                    if isinstance(template_data, dict) and "chat_template" in template_data:
+                        self.processor.chat_template = template_data["chat_template"]
     
     def print_memory_usage(self, prefix: str = ""):
-        """打印当前显存使用情况"""
-        if not torch.cuda.is_available():
-            return
-        
-        allocated = torch.cuda.memory_allocated(self.device) / 1024**3  # GB
-        reserved = torch.cuda.memory_reserved(self.device) / 1024**3   # GB
-        utilization = (allocated / self.total_gpu_memory) * 100
-        
-        print(f"{prefix} - 显存使用: {allocated:.1f}GB/{self.total_gpu_memory:.1f}GB ({utilization:.1f}%)")
+        if not torch.cuda.is_available(): return
+        allocated = torch.cuda.memory_allocated(self.device) / 1024**3
+        print(f"{prefix} - 显存使用: {allocated:.1f}GB/{self.total_gpu_memory:.1f}GB")
     
     def evaluate(self, input_dict, language="en", with_CoT=False):
-        """
-        VLABench标准评估接口
-        """
-        # 显存监控
         self.print_memory_usage("开始推理")
-        
-        # 构建输入
         ti_list = get_ti_list(input_dict, language, with_CoT=with_CoT)
         
-        # 转换为Qwen3-VL格式
         content = []
         image_list = []
-        
         for ti in ti_list:
             if ti[0] == "text":
                 content.append({"type": "text", "text": ti[1]})
@@ -371,68 +306,210 @@ class Qwen3VLAdapter(BaseVLM):
                 image_list.append(Image.open(ti[1]).convert('RGB'))
         
         messages = [{"role": "user", "content": content}]
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         
-        # 准备输入
-        text = self.processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        
-        inputs = self.processor(
-            text=[text],
-            images=image_list if image_list else None,
-            padding=True,
-            return_tensors="pt",
-        )
-        
-        # 移动到设备
+        inputs = self.processor(text=[text], images=image_list if image_list else None, padding=True, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         
-        # 推理
         try:
             with torch.no_grad():
                 generated_ids = self.model.generate(
-                    **inputs, 
-                    max_new_tokens=512,  # VLABench标准配置
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
+                    **inputs, max_new_tokens=512, do_sample=False,
                     pad_token_id=self.processor.tokenizer.eos_token_id
                 )
                 input_len = inputs["input_ids"].shape[1]
-                generated_ids_trimmed = generated_ids[:, input_len:]
-                output_text = self.processor.batch_decode(
-                    generated_ids_trimmed, 
-                    skip_special_tokens=True, 
-                    clean_up_tokenization_spaces=False
-                )[0]
+                output_text = self.processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
             
-            # 解析输出
             output = {"origin_output": output_text}
             try:
                 json_data = output_text.split("```json")[1].split("```")[0]
                 output["skill_sequence"] = json.loads(json_data)
             except:
                 output["format_error"] = "format_error"
-            
         except Exception as e:
-            print(f"{Fore.RED}推理错误: {str(e)[:100]}{Style.RESET_ALL}")
             output = {"origin_output": "", "format_error": "inference_error"}
         
-        # 清理中间变量
-        if 'inputs' in locals(): del inputs
-        if 'generated_ids' in locals(): del generated_ids
-        if 'generated_ids_trimmed' in locals(): del generated_ids_trimmed
-        
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        
-        # 显示推理后显存使用
-        self.print_memory_usage("推理完成")
-        
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
         return output
-    
+
     def get_name(self):
         return os.path.basename(self.model_path)
+
+
+class InternVLAdapter(BaseVLM):
+    """
+    InternVL2 / InternVL2.5 适配器
+    """
+    def __init__(self, model_path: str, device: str = "cuda:0", batch_size: int = 4, baseline_path: str = None) -> None:
+        self.model_path = model_path
+        self.device = device
+        super().__init__()
+        
+        print(f"{Fore.YELLOW}正在加载 InternVL 模型: {model_path}")
+        from transformers import AutoModel, AutoTokenizer
+        self.model = AutoModel.from_pretrained(
+            model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True,
+            trust_remote_code=True, device_map="auto"
+        ).eval()
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
+        
+        # 导入必要的转换函数
+        import torchvision.transforms as T
+        from torchvision.transforms.functional import InterpolationMode
+        self.IMAGENET_MEAN = (0.485, 0.456, 0.406)
+        self.IMAGENET_STD = (0.229, 0.224, 0.225)
+        self.transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.Resize((448, 448), interpolation=InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=self.IMAGENET_MEAN, std=self.IMAGENET_STD)
+        ])
+
+    def dynamic_preprocess(self, image, min_num=1, max_num=12, image_size=448, use_thumbnail=False):
+        orig_width, orig_height = image.size
+        aspect_ratio = orig_width / orig_height
+        target_ratios = set((i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if i * j <= max_num and i * j >= min_num)
+        target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
+        
+        best_ratio_diff = float('inf')
+        best_ratio = (1, 1)
+        area = orig_width * orig_height
+        for ratio in target_ratios:
+            target_aspect_ratio = ratio[0] / ratio[1]
+            ratio_diff = abs(aspect_ratio - target_aspect_ratio)
+            if ratio_diff < best_ratio_diff:
+                best_ratio_diff = ratio_diff
+                best_ratio = ratio
+            elif ratio_diff == best_ratio_diff:
+                if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
+                    best_ratio = ratio
+        
+        target_width = image_size * best_ratio[0]
+        target_height = image_size * best_ratio[1]
+        blocks = best_ratio[0] * best_ratio[1]
+        resized_img = image.resize((target_width, target_height))
+        processed_images = []
+        for i in range(blocks):
+            box = ((i % best_ratio[0]) * image_size, (i // best_ratio[0]) * image_size, ((i % best_ratio[0]) + 1) * image_size, ((i // best_ratio[0]) + 1) * image_size)
+            processed_images.append(resized_img.crop(box))
+        if use_thumbnail and len(processed_images) != 1:
+            processed_images.append(image.resize((image_size, image_size)))
+        return processed_images
+
+    def evaluate(self, input_dict, language="en", with_CoT=False):
+        ti_list = get_ti_list(input_dict, language, with_CoT=with_CoT)
+        prompt = ""
+        pixel_values_list = []
+        
+        for ti in ti_list:
+            if ti[0] == "text":
+                prompt += ti[1]
+            elif ti[0] == "image":
+                prompt += "<image>\n"
+                img = Image.open(ti[1]).convert('RGB')
+                patches = self.dynamic_preprocess(img, image_size=448, use_thumbnail=True, max_num=12)
+                pixel_values = torch.stack([self.transform(p) for p in patches])
+                pixel_values_list.append(pixel_values)
+        
+        if pixel_values_list:
+            pixel_values = torch.cat(pixel_values_list, dim=0).to(torch.bfloat16).to(self.device)
+        else:
+            pixel_values = None
+            
+        generation_config = dict(max_new_tokens=512, do_sample=False)
+        try:
+            response = self.model.chat(self.tokenizer, pixel_values, prompt, generation_config)
+            output = {"origin_output": response}
+            try:
+                json_data = response.split("```json")[1].split("```")[0]
+                output["skill_sequence"] = json.loads(json_data)
+            except:
+                output["format_error"] = "format_error"
+        except Exception as e:
+            output = {"origin_output": "", "format_error": "inference_error"}
+        
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
+        return output
+
+    def get_name(self):
+        return os.path.basename(self.model_path)
+
+
+class MiniCPMVAdapter(BaseVLM):
+    """
+    MiniCPM-V 适配器
+    """
+    def __init__(self, model_path: str, device: str = "cuda:0", batch_size: int = 4, baseline_path: str = None, quantization: str = None) -> None:
+        self.model_path = model_path
+        self.device = device
+        super().__init__()
+        
+        print(f"{Fore.YELLOW}正在加载 MiniCPM-V 模型: {model_path} (Quantization: {quantization})")
+        from transformers import AutoModel, AutoTokenizer, BitsAndBytesConfig
+        
+        load_params = {
+            "trust_remote_code": True,
+            "attn_implementation": 'sdpa',
+            "torch_dtype": torch.bfloat16
+        }
+        
+        if quantization == "4bit":
+            load_params["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
+            load_params["device_map"] = "auto"
+        elif quantization == "8bit":
+            load_params["load_in_8bit"] = True
+            load_params["device_map"] = "auto"
+        else:
+            load_params["device_map"] = "auto"
+
+        self.model = AutoModel.from_pretrained(model_path, **load_params).eval()
+        if quantization is None:
+            self.model = self.model.cuda()
+            
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+
+    def evaluate(self, input_dict, language="en", with_CoT=False):
+        ti_list = get_ti_list(input_dict, language, with_CoT=with_CoT)
+        content = []
+        for ti in ti_list:
+            if ti[0] == "text":
+                content.append(ti[1])
+            elif ti[0] == "image":
+                content.append(Image.open(ti[1]).convert('RGB'))
+        
+        msgs = [{'role': 'user', 'content': content}]
+        try:
+            response = self.model.chat(image=None, msgs=msgs, tokenizer=self.tokenizer)
+            output = {"origin_output": response}
+            try:
+                json_data = response.split("```json")[1].split("```")[0]
+                output["skill_sequence"] = json.loads(json_data)
+            except:
+                output["format_error"] = "format_error"
+        except Exception as e:
+            output = {"origin_output": "", "format_error": "inference_error"}
+            
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
+        return output
+
+    def get_name(self):
+        return os.path.basename(self.model_path)
+
+
+def get_adapter(model_path, device="cuda:0", batch_size=4, baseline_path=None, quantization=None):
+    """模型适配器工厂"""
+    model_path_lower = model_path.lower()
+    if "internvl" in model_path_lower:
+        return InternVLAdapter(model_path, device, batch_size, baseline_path)
+    elif "minicpm" in model_path_lower:
+        return MiniCPMVAdapter(model_path, device, batch_size, baseline_path, quantization)
+    else:
+        return QwenVLAdapter(model_path, device, batch_size, baseline_path)
 
 
 def discover_models(baseline_path: str, checkpoints_dir: str, max_checkpoints: int = None, skip_baseline: bool = False):
@@ -528,10 +605,23 @@ def single_model_evaluate(args, model_name=None):
     
     # 如果是baseline维度，使用所有可用维度
     if args.dimension == "baseline":
-        all_dimensions = ["M&T", "CommonSense", "Semantic", "Spatial", "PhysicalLaw", "Complex"]
+        all_dimensions = ["M&T", "CommenSence", "Semantic", "Spatial", "PhysicsLaw", "Complex"]
         print(f"{Fore.YELLOW}Baseline模式: 将评估所有维度{Style.RESET_ALL}")
         all_results = {}
         
+        # 创建模型适配器 (移出循环，只加载一次)
+        vlm = get_adapter(
+            args.model_path, 
+            device=args.device,
+            batch_size=args.batch_size,
+            baseline_path=args.baseline_model,
+            quantization=args.quantization
+        )
+        
+        # 如果提供了model_name参数，则使用它作为模型名称
+        if model_name:
+            vlm.name = model_name
+
         for dim in all_dimensions:
             print(f"\n{Fore.CYAN}开始评估维度: {dim}{Style.RESET_ALL}")
             print(f"{'-'*40}")
@@ -547,18 +637,6 @@ def single_model_evaluate(args, model_name=None):
             task_list = all_tasks[:min(len(all_tasks), args.max_tasks)]
             
             print(f"发现 {len(all_tasks)} 个任务，评估前 {len(task_list)} 个: {task_list[:3]}...")
-            
-            # 创建模型适配器
-            vlm = Qwen3VLAdapter(
-                args.model_path, 
-                device=args.device,
-                batch_size=args.batch_size,
-                baseline_path=args.baseline_model
-            )
-            
-            # 如果提供了model_name参数，则使用它作为模型名称
-            if model_name:
-                vlm.name = model_name
             
             # 为每个维度准备保存路径
             save_path = prepare_dimension_save_path(dim, vlm.name)
@@ -624,11 +702,12 @@ def single_model_evaluate(args, model_name=None):
         print(f"{Fore.YELLOW}注意: 由于max_tasks={args.max_tasks}限制，跳过 {len(all_tasks)-len(task_list)} 个任务{Style.RESET_ALL}")
     
     # 创建模型适配器
-    vlm = Qwen3VLAdapter(
+    vlm = get_adapter(
         args.model_path, 
         device=args.device,
         batch_size=args.batch_size,
-        baseline_path=args.baseline_model
+        baseline_path=args.baseline_model,
+        quantization=args.quantization
     )
     
     # 如果提供了model_name参数，则使用它作为模型名称
@@ -795,6 +874,8 @@ def main():
                         help="是否使用Chain-of-Thought推理，默认不使用")
     parser.add_argument("--skip-baseline", action="store_true",
                         help="批量模式下跳过基线模型评估")
+    parser.add_argument("--quantization", type=str, default=None, choices=["4bit", "8bit"],
+                        help="模型量化方式 (仅支持 MiniCPM-V)")
     
     args = parser.parse_args()
 
