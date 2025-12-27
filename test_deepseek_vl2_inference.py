@@ -71,20 +71,16 @@ def main(args):
     print("✅ Processor 加载成功")
     
     # 加载模型
-    # 多卡时使用 balanced_low_0 策略：将模型分布在 GPU 1+ 上，留 GPU 0 给 generate
     num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    if num_gpus > 1:
-        device_map = "balanced_low_0"
-        print(f"\n[3/4] 加载模型 (bfloat16, {num_gpus} GPUs, balanced_low_0)...")
-    else:
-        device_map = "auto"
-        print("\n[3/4] 加载模型 (bfloat16, 单卡)...")
+    print(f"\n[3/4] 加载模型 (bfloat16, {num_gpus} GPUs)...")
+    print("      注: DeepSeek-VL2-Small 需要约 40-80GB 显存")
     
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
-        device_map=device_map,
+        device_map="auto",  # 均匀分布到多卡
+        low_cpu_mem_usage=True,
     )
     model.eval()
     print("✅ 模型加载成功")
@@ -118,25 +114,42 @@ def main(args):
         images=[test_image],
         force_batchify=True,
         system_prompt=""
-    ).to(model.device)
+    ).to(model.device, dtype=torch.bfloat16)
     
     with torch.no_grad():
-        inputs_embeds = model.prepare_inputs_embeds(**inputs)
+        # 使用 incremental_prefilling 减少显存峰值 (chunk_size=512)
+        # 参考: https://github.com/deepseek-ai/DeepSeek-VL2
+        chunk_size = 512
+        if hasattr(model, 'incremental_prefilling'):
+            print("      使用 incremental_prefilling (chunk_size=512)...")
+            inputs_embeds, past_key_values = model.incremental_prefilling(
+                input_ids=inputs.input_ids,
+                images=inputs.images,
+                images_seq_mask=inputs.images_seq_mask,
+                images_spatial_crop=inputs.images_spatial_crop,
+                attention_mask=inputs.attention_mask,
+                chunk_size=chunk_size
+            )
+        else:
+            inputs_embeds = model.prepare_inputs_embeds(**inputs)
+            past_key_values = None
         
-        # 多卡情况下，需要确保 generate 在正确的设备上
-        # 使用 language 模型的设备
+        # 多卡情况下，确保输入在正确设备上
         if hasattr(model.language, 'device'):
             device = model.language.device
         else:
-            # 获取 language 模型的第一个参数的设备
             device = next(model.language.parameters()).device
         
+        # 调用 generate
         outputs = model.language.generate(
-            inputs_embeds=inputs_embeds.to(device),
+            inputs_embeds=inputs_embeds.to(device) if inputs_embeds is not None else None,
+            input_ids=inputs.input_ids.to(device),
             attention_mask=inputs.attention_mask.to(device),
+            past_key_values=past_key_values,
             pad_token_id=tokenizer.eos_token_id,
             max_new_tokens=50,
             do_sample=False,
+            use_cache=True,
         )
     
     response = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
