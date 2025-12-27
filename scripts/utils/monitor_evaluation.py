@@ -25,46 +25,62 @@ def get_gpu_info():
 
 def get_progress_from_log(log_file):
     if not os.path.exists(log_file):
-        return 0, 0, "等待中", "N/A", "N/A"
+        return 0, 0, "等待中", "N/A", "N/A", "N/A"
     
     try:
+        log_path = Path(log_file)
+        config_name = log_path.parent.name
+        
         with open(log_file, 'r') as f:
             lines = f.readlines()
             
-        # 查找当前维度 (从后往前找全文)
+        if not lines:
+            return 0, 0, "队列中", "等待调度", "-", config_name
+
+        # 查找当前维度和模型名
         current_dim = "初始化"
+        model_name = ""
+        
         for line in reversed(lines):
             if "评估维度:" in line or "开始评估维度:" in line:
-                # 兼容两种打印格式
                 parts = line.split("维度:")
                 if len(parts) > 1:
                     current_dim = parts[1].strip().replace("-", "")
-                    # 去除颜色代码 (如果有)
                     current_dim = re.sub(r'\x1b\[[0-9;]*m', '', current_dim)
-                    break
-            elif "working on" in line and current_dim == "初始化":
-                # 兜底逻辑：如果还没看到维度开始，可能正在加载模型
-                current_dim = "加载中"
+            
+            if "评估模型:" in line:
+                model_name = line.split("模型:")[1].strip()
+            elif "working on" in line and not model_name:
+                model_name = line.split("working on")[1].strip()
+            
+            if current_dim != "初始化" and model_name:
+                break
         
-        content = "".join(lines[-100:]) # 增加搜索范围到最后100行
+        # 清理颜色代码
+        model_name = re.sub(r'\x1b\[[0-9;]*m', '', model_name) if model_name else "加载中..."
+        display_name = f"{config_name} > {model_name}"
+
+        content = "".join(lines[-100:])
         
-        # 查找进度百分比和剩余时间
-        # 匹配格式: 0%(  4/900) using:  0h 0m 7s, remain:  0h26m40s
+        # 查找进度
         matches = re.findall(r'(\d+)%\(\s*(\d+)/(\d+)\).*?remain:\s*([\dhms\s:]+)', content)
         if matches:
             last_match = matches[-1]
-            percent = int(last_match[0])
-            current = int(last_match[1])
-            total = int(last_match[2])
-            eta = last_match[3].strip()
-            return current, total, f"{percent}%", current_dim, eta
+            percent, current, total, eta = last_match
+            return int(current), int(total), f"{percent}%", current_dim, eta.strip(), display_name
         
         if "评估完成!" in content or "Baseline评估完成" in content:
-            return 100, 100, "已完成", "全部", "0s"
+            # 尝试从全文找一次维度名，防止完成时丢失
+            if current_dim == "初始化":
+                for line in lines:
+                    if "评估维度:" in line:
+                        current_dim = line.split("维度:")[1].strip()
+                        break
+            return 100, 100, "已完成", current_dim, "0s", display_name
             
-        return 0, 0, "运行中", current_dim, "计算中..."
+        return 0, 0, "运行中", current_dim, "计算中...", display_name
     except Exception as e:
-        return 0, 0, "读取错误", "N/A", str(e)
+        return 0, 0, "读取错误", "N/A", str(e), "N/A"
 
 def get_latest_log_files():
     """动态获取最近活跃的日志文件列表"""
@@ -92,22 +108,27 @@ def main():
             # 动态获取日志文件
             log_files = get_latest_log_files()
             
-            table = Table(show_header=True, header_style="bold magenta", box=None)
-            table.add_column("任务", style="white", width=15)
-            table.add_column("当前维度", style="cyan", width=15)
-            table.add_column("进度", style="green", width=15)
-            table.add_column("样本数", style="yellow", width=12)
-            table.add_column("剩余时间 (ETA)", style="bold red", width=20)
+            table = Table(show_header=True, header_style="bold magenta", box=None, padding=(0, 1))
+            table.add_column("配置 > 模型名称", style="white", width=35)
+            table.add_column("维度", style="cyan", width=15, justify="center")
+            table.add_column("进度", style="green", width=10, justify="right")
+            table.add_column("样本数", style="yellow", width=12, justify="right")
+            table.add_column("剩余时间 (ETA)", style="bold red", width=18, justify="right")
             
             if not log_files:
                 table.add_row("无活跃任务", "-", "-", "-", "-")
             else:
                 for log_file in log_files:
-                    current, total, status, dim, eta = get_progress_from_log(log_file)
+                    current, total, status, dim, eta, model = get_progress_from_log(log_file)
                     # 优化显示：如果已完成，进度显示 100%
                     display_status = status if "%" in status else ("100%" if status == "已完成" else status)
+                    
+                    # 如果名称太长，截断
+                    if len(model) > 33:
+                        model = model[:30] + "..."
+                        
                     table.add_row(
-                        Path(log_file).stem.upper(),
+                        model,
                         dim, 
                         display_status,
                         f"{current}/{total}",

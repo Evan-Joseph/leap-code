@@ -694,6 +694,8 @@ def single_model_evaluate(args, model_name=None):
     if model_name:
         vlm.name = model_name
     
+    print(f"评估模型: {vlm.name}")
+    
     # 为每个维度准备保存路径，不使用时间戳
     save_path = prepare_dimension_save_path(args.dimension, vlm.name, args.output_dir)
     

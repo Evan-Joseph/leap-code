@@ -75,86 +75,126 @@ def _aggregate_from_final_score(final_score_path: str):
         }
 
 def load_evaluation_results():
-    """加载 eva_results 下 6 维度 (目录名) 下各模型 final_score.json 聚合后的结果。
-    兼容：若存在 summary.json 则优先使用；否则自动聚合 final_score.json。
+    """加载 results 下各配置目录下的评估结果。
+    结构：results/<config_name>/<dimension>/<model_name>/final_score.json
     """
     results = OrderedDict()
-
-    # 动态检测维度目录
-    detected_dimensions = []
-    for entry in os.listdir(EVAL_DIR):
-        path = os.path.join(EVAL_DIR, entry)
-        if os.path.isdir(path):
-            detected_dimensions.append(entry)
-
-    # 维度排序：使用预定义顺序提升可读性
-    preferred_order = ['M&T', 'Semantic', 'Spatial', 'PhysicsLaw', 'Complex', 'CommenSence']
-    dimensions = [d for d in preferred_order if d in detected_dimensions] + [d for d in detected_dimensions if d not in preferred_order]
-
-    for d in dimensions:
+    
+    # 预定义维度顺序（标准名称）
+    standard_dimensions = ['M&T', 'Semantic', 'Spatial', 'PhysicsLaw', 'Complex', 'CommonSense']
+    # 映射关系，处理命名不一致
+    dim_mapping = {
+        'PhysicalLaw': 'PhysicsLaw',
+        'PhysicsLaw': 'PhysicsLaw',
+        'CommenSence': 'CommonSense',
+        'CommonSense': 'CommonSense'
+    }
+    
+    for d in standard_dimensions:
         results[d] = OrderedDict()
 
     summary_count = 0
     final_score_count = 0
 
-    for dimension in dimensions:
-        dim_dir = os.path.join(EVAL_DIR, dimension)
-        if not os.path.isdir(dim_dir):
-            continue
-        # 枚举模型子目录
-        model_dirs = [m for m in os.listdir(dim_dir) if os.path.isdir(os.path.join(dim_dir, m))]
+    if not os.path.exists(EVAL_DIR):
+        print(f"[Error] EVAL_DIR not found: {EVAL_DIR}")
+        return results, []
 
-        # 排序：Baseline 优先，checkpoint-数字按数字升序，其余字母序
-        def model_sort_key(name):
-            if name.lower() == 'baseline':
-                return (0, 0)
-            if name.startswith('checkpoint-'):
-                try:
-                    num = int(name.split('checkpoint-')[-1])
-                except ValueError:
-                    num = 999999
-                return (1, num)
-            return (2, name)
-        model_dirs.sort(key=model_sort_key)
-
-        for model in model_dirs:
-            model_path = os.path.join(dim_dir, model)
-            summary_path = os.path.join(model_path, 'summary.json')
-            final_score_path = os.path.join(model_path, 'final_score.json')
-
-            if os.path.isfile(summary_path):
-                try:
-                    with open(summary_path, 'r') as f:
-                        data = json.load(f)
-                    avg_scores = data.get('average_scores') or data.get('scores') or {}
-                    # 若没有 total_score 等字段，尝试回退使用 final_score 聚合
-                    required_keys = ['skill_match_score','entity_match_score','skill_with_entity_match_score','exact_match_score','total_score']
-                    if not all(k in avg_scores for k in required_keys) and os.path.isfile(final_score_path):
-                        agg = _aggregate_from_final_score(final_score_path)
-                        avg_scores = agg
-                    results[dimension][model] = avg_scores
-                    summary_count += 1
-                    print(f"✓ Loaded(summary): {dimension} - {model}")
+    config_dirs = [d for d in os.listdir(EVAL_DIR) if os.path.isdir(os.path.join(EVAL_DIR, d)) and d != 'backup']
+    
+    for config in config_dirs:
+        config_path = os.path.join(EVAL_DIR, config)
+        
+        # 遍历该配置下的所有实际目录
+        for actual_dim in os.listdir(config_path):
+            actual_dim_path = os.path.join(config_path, actual_dim)
+            if not os.path.isdir(actual_dim_path):
+                continue
+            
+            # 映射到标准维度名称
+            target_dim = dim_mapping.get(actual_dim, actual_dim)
+            if target_dim not in standard_dimensions:
+                # 如果不在标准列表中，动态添加
+                if target_dim not in results:
+                    results[target_dim] = OrderedDict()
+                
+            # 遍历模型
+            model_dirs = [m for m in os.listdir(actual_dim_path) if os.path.isdir(os.path.join(actual_dim_path, m))]
+            for model in model_dirs:
+                # 过滤逻辑：仅保留 0-shot 相关的 2B 级别模型
+                name_lower = f"{config}_{model}".lower()
+                if '1shot' in name_lower or '4b' in name_lower:
                     continue
-                except Exception as e:
-                    print(f"[Warn] Failed to read summary.json for {dimension}/{model}: {e}")
+                
+                # 构造显示名称
+                display_name = f"{config}_{model}" if model.lower() == 'baseline' else model
+                if 'checkpoint' in model:
+                    display_name = f"{config}_{model}"
+                
+                model_path = os.path.join(actual_dim_path, model)
+                final_score_path = os.path.join(model_path, 'final_score.json')
+                summary_path = os.path.join(model_path, 'summary.json')
 
-            if os.path.isfile(final_score_path):
-                agg_scores = _aggregate_from_final_score(final_score_path)
-                results[dimension][model] = agg_scores
-                final_score_count += 1
-                print(f"✓ Aggregated(final_score): {dimension} - {model}")
-            else:
-                print(f"[Skip] No summary.json or final_score.json in {dimension}/{model}")
+                data_loaded = False
+                if os.path.isfile(summary_path):
+                    try:
+                        with open(summary_path, 'r') as f:
+                            data = json.load(f)
+                        avg_scores = data.get('average_scores') or data.get('scores') or {}
+                        results[target_dim][display_name] = avg_scores
+                        summary_count += 1
+                        data_loaded = True
+                    except Exception:
+                        pass
 
+                if not data_loaded and os.path.isfile(final_score_path):
+                    agg_scores = _aggregate_from_final_score(final_score_path)
+                    results[target_dim][display_name] = agg_scores
+                    final_score_count += 1
+                    data_loaded = True
+                
+                if data_loaded:
+                    print(f"✓ Loaded: {config}/{actual_dim}/{model} -> {target_dim}")
+
+    # 过滤掉没有数据的维度，并按标准顺序排序
+    final_results = OrderedDict()
+    for d in standard_dimensions:
+        if d in results and results[d]:
+            final_results[d] = results[d]
+    
+    # 添加不在标准列表中的其他维度
+    for d in results:
+        if d not in standard_dimensions and results[d]:
+            final_results[d] = results[d]
+
+    dimensions = list(final_results.keys())
     print(f"\nLoaded {summary_count} summary.json and aggregated {final_score_count} final_score.json files.")
-    return results, dimensions
+    return final_results, dimensions
 
 def print_summary_table(results, dimensions):
     """打印6个维度的汇总表格"""
     print("\n" + "="*120)
     print("6-Dimension Evaluation Results Summary".center(120))
     print("="*120)
+    
+    # 过滤模型：仅保留 0-shot 相关的 2B 级别模型
+    filtered_results = OrderedDict()
+    for dim, models in results.items():
+        filtered_results[dim] = OrderedDict()
+        for model_name, scores in models.items():
+            name_lower = model_name.lower()
+            # 排除 1-shot
+            if '1shot' in name_lower:
+                continue
+            # 排除 4B
+            if '4b' in name_lower:
+                continue
+            
+            # 保留 Baseline (2B), MiniCPM, InternVL, 以及微调后的 checkpoint
+            if 'baseline' in name_lower or 'minicpm' in name_lower or 'internvl' in name_lower or 'checkpoint' in name_lower:
+                filtered_results[dim][model_name] = scores
+    
+    results = filtered_results
     
     # 为每个维度创建DataFrame
     dimension_dfs = {}
@@ -174,18 +214,43 @@ def print_summary_table(results, dimensions):
     print("Total Score Comparison Across Dimensions".center(80))
     print(f"{'='*80}")
     
-    total_scores_df = pd.DataFrame()
+    total_scores_dict = {}
     valid_dimensions = [d for d in dimensions if d in results and results[d]]
     
     for dimension in valid_dimensions:
-        total_scores = [results[dimension][model]['total_score'] for model in results[dimension].keys()]
-        total_scores_df[dimension] = total_scores
+        dim_scores = {}
+        for model, scores in results[dimension].items():
+            dim_scores[model] = scores.get('total_score', 0)
+        total_scores_dict[dimension] = dim_scores
     
-    if valid_dimensions:
-        total_scores_df.index = list(results[valid_dimensions[0]].keys())
+    if total_scores_dict:
+        total_scores_df = pd.DataFrame(total_scores_dict)
         total_scores_df = total_scores_df.round(4)
+        # 填充缺失值为 0 或 NaN
+        total_scores_df = total_scores_df.fillna(0)
+        
+        # 排序：Baseline 优先，checkpoint-数字按数字升序，其余字母序
+        def model_sort_key(name):
+            name_lower = name.lower()
+            if 'baseline' in name_lower:
+                return (0, 0, name_lower)
+            if 'checkpoint-' in name_lower:
+                try:
+                    # 提取数字，可能在中间或结尾
+                    import re
+                    match = re.search(r'checkpoint-(\d+)', name_lower)
+                    num = int(match.group(1)) if match else 999999
+                except Exception:
+                    num = 999999
+                return (1, num, name_lower)
+            return (2, 0, name_lower)
+            
+        sorted_index = sorted(total_scores_df.index, key=model_sort_key)
+        total_scores_df = total_scores_df.reindex(sorted_index)
+        
         print(total_scores_df.to_string())
     else:
+        total_scores_df = pd.DataFrame()
         print("No valid data found for any dimension")
     
     print("="*120 + "\n")
