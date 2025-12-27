@@ -18,10 +18,13 @@ def run_command(cmd, log_file, use_gpu_scheduling=False):
     if use_gpu_scheduling:
         # 获取一个可用的 GPU 槽位
         gpu_id = gpu_queue.get()
-        # 替换命令中的占位符
-        cmd = cmd.replace("__DEVICE__", f"cuda:{gpu_id}")
-        # 或者设置 CUDA_VISIBLE_DEVICES (注意: 这会改变 logical device index 为 0)
-        # env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        
+        # 关键优化：强制物理隔离 GPU，防止进程同时占用多张卡的显存
+        env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        
+        # 由于设置了 CUDA_VISIBLE_DEVICES，物理 GPU x 变成了逻辑上的 cuda:0
+        # 所以必须将命令中的 __DEVICE__ 替换为 cuda:0
+        cmd = cmd.replace("__DEVICE__", "cuda:0")
         
     print(f"[START] (GPU: {gpu_id if gpu_id is not None else 'N/A'}) {cmd}")
     
