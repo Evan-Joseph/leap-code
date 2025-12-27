@@ -123,12 +123,16 @@ def main():
             # 动态获取日志文件
             log_files = get_latest_log_files()
             
+            # 动态调整表格宽度
+            width = console.size.width
+            model_col_width = max(30, width - 65) # 自适应剩余空间
+            
             table = Table(show_header=True, header_style="bold magenta", box=None, padding=(0, 1))
-            table.add_column("配置 > 模型名称", style="white", width=35)
-            table.add_column("维度", style="cyan", width=15, justify="center")
-            table.add_column("进度", style="green", width=10, justify="right")
-            table.add_column("样本数", style="yellow", width=12, justify="right")
-            table.add_column("剩余时间 (ETA)", style="bold red", width=18, justify="right")
+            table.add_column("模型 Checkpoint", style="bright_white", width=model_col_width)
+            table.add_column("维度", style="cyan", width=12, justify="center")
+            table.add_column("进度", style="green", width=8, justify="right")
+            table.add_column("样本", style="yellow", width=8, justify="right")
+            table.add_column("剩余时间", style="bold red", width=12, justify="right")
             
             if not log_files:
                 table.add_row("无活跃任务", "-", "-", "-", "-")
@@ -138,12 +142,15 @@ def main():
                     # 优化显示：如果已完成，进度显示 100%
                     display_status = status if "%" in status else ("100%" if status == "已完成" else status)
                     
-                    # 如果名称太长，截断
-                    if len(model) > 33:
-                        model = model[:30] + "..."
+                    # 精简显示名称
+                    model_display = model.replace("lora_ablation > ", "").replace("lora_", "")
+                    # 如果太长，截断中间
+                    if len(model_display) > model_col_width:
+                        keep = model_col_width - 3
+                        model_display = model_display[:keep] + "..."
                         
                     table.add_row(
-                        model,
+                        model_display,
                         dim, 
                         display_status,
                         f"{current}/{total}",
