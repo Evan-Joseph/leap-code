@@ -6,11 +6,11 @@ DeepSeek-VL2 推理验证脚本
 验证 DeepSeek-VL2 模型是否能正常工作。
 
 使用方法:
-    python test_deepseek_vl2_inference.py --model_path ./models/deepseek-vl2-small
+    python test_deepseek_vl2_inference.py --model_path ./models/deepseek-vl2-tiny
 
-硬件要求:
-    - 2x 32GB GPU 或 1x 80GB GPU
-    - 不支持 4-bit 量化 (MoE 架构限制)
+模型显存要求:
+    - DeepSeek-VL2-Tiny: 6-9 GB (推荐)
+    - DeepSeek-VL2-Small: 40-80 GB (需要多卡或 A100)
 
 环境要求:
     - transformers==4.38.2
@@ -71,15 +71,12 @@ def main(args):
     print("✅ Processor 加载成功")
     
     # 加载模型
-    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    print(f"\n[3/4] 加载模型 (bfloat16, {num_gpus} GPUs)...")
-    print("      注: DeepSeek-VL2-Small 需要约 40-80GB 显存")
-    
+    print("\n[3/4] 加载模型 (bfloat16)...")
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
-        device_map="auto",  # 均匀分布到多卡
+        device_map="auto",
         low_cpu_mem_usage=True,
     )
     model.eval()
@@ -117,35 +114,13 @@ def main(args):
     ).to(model.device, dtype=torch.bfloat16)
     
     with torch.no_grad():
-        # 使用 incremental_prefilling 减少显存峰值 (chunk_size=512)
-        # 参考: https://github.com/deepseek-ai/DeepSeek-VL2
-        chunk_size = 512
-        if hasattr(model, 'incremental_prefilling'):
-            print("      使用 incremental_prefilling (chunk_size=512)...")
-            inputs_embeds, past_key_values = model.incremental_prefilling(
-                input_ids=inputs.input_ids,
-                images=inputs.images,
-                images_seq_mask=inputs.images_seq_mask,
-                images_spatial_crop=inputs.images_spatial_crop,
-                attention_mask=inputs.attention_mask,
-                chunk_size=chunk_size
-            )
-        else:
-            inputs_embeds = model.prepare_inputs_embeds(**inputs)
-            past_key_values = None
+        # 准备输入
+        inputs_embeds = model.prepare_inputs_embeds(**inputs)
         
-        # 多卡情况下，确保输入在正确设备上
-        if hasattr(model.language, 'device'):
-            device = model.language.device
-        else:
-            device = next(model.language.parameters()).device
-        
-        # 调用 generate
+        # 生成
         outputs = model.language.generate(
-            inputs_embeds=inputs_embeds.to(device) if inputs_embeds is not None else None,
-            input_ids=inputs.input_ids.to(device),
-            attention_mask=inputs.attention_mask.to(device),
-            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=inputs.attention_mask,
             pad_token_id=tokenizer.eos_token_id,
             max_new_tokens=50,
             do_sample=False,
@@ -168,8 +143,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        default="./models/deepseek-vl2-small",
-        help="模型路径"
+        default="./models/deepseek-vl2-tiny",
+        help="模型路径 (默认: ./models/deepseek-vl2-tiny)"
     )
     args = parser.parse_args()
     
