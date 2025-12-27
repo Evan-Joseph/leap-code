@@ -94,13 +94,6 @@ for preset in "${PRESETS[@]}"; do
             
             # 构建命令
             # 使用 scripts/ablation/run_vlm_evaluation_lora.py
-            CMD="$PYTHON_PATH scripts/ablation/run_vlm_evaluation_lora.py \
-                --dimension '$dim' \
-                --base_model_path '$BASELINE_MODEL' \
-                --lora_adapter_path '$CHECKPOINT_DIR' \
-                --model_name '$MODEL_ID' \
-                --data_path '$DATA_PATH' \
-                --output_dir '$TASK_OUTPUT_DIR' \
             # 使用占位符 __DEVICE__，由 task_runner 动态替换为 cuda:0 或 cuda:1
             CMD="$PYTHON_PATH scripts/ablation/run_vlm_evaluation_lora.py \
                 --dimension '$dim' \
