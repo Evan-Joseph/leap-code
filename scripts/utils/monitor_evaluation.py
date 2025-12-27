@@ -123,32 +123,43 @@ def main():
             # 动态获取日志文件
             log_files = get_latest_log_files()
             
-            # 动态调整表格宽度
-            width = console.size.width
-            model_col_width = max(30, width - 65) # 自适应剩余空间
+            # 动态调整表格宽度 - 使用 Rich 的 expand 功能
+            table = Table(
+                show_header=True, 
+                header_style="bold magenta", 
+                box=None, 
+                padding=(0, 2),
+                expand=True,
+                collapse_padding=True
+            )
             
-            table = Table(show_header=True, header_style="bold magenta", box=None, padding=(0, 1))
-            table.add_column("模型 Checkpoint", style="bright_white", width=model_col_width)
-            table.add_column("维度", style="cyan", width=12, justify="center")
-            table.add_column("进度", style="green", width=8, justify="right")
-            table.add_column("样本", style="yellow", width=8, justify="right")
-            table.add_column("剩余时间", style="bold red", width=12, justify="right")
+            # 使用 ratio 分配宽度
+            table.add_column("模型 Checkpoint", style="bright_white", ratio=4)
+            table.add_column("维度", style="cyan", justify="center", ratio=2)
+            table.add_column("进度", style="green", justify="left", ratio=3)
+            table.add_column("样本", style="yellow", justify="right", width=12)
+            table.add_column("剩余时间", style="bold red", justify="right", width=12)
             
             if not log_files:
                 table.add_row("无活跃任务", "-", "-", "-", "-")
             else:
                 for log_file in log_files:
                     current, total, status, dim, eta, model = get_progress_from_log(log_file)
-                    # 优化显示：如果已完成，进度显示 100%
-                    display_status = status if "%" in status else ("100%" if status == "已完成" else status)
                     
                     # 精简显示名称
                     model_display = model.replace("lora_ablation > ", "").replace("lora_", "")
-                    # 如果太长，截断中间
-                    if len(model_display) > model_col_width:
-                        keep = model_col_width - 3
-                        model_display = model_display[:keep] + "..."
-                        
+                    
+                    # 进度条可视化
+                    if total > 0 and "%" in status:
+                        pct = current / total
+                        filled = int(pct * 20)
+                        bar = "━" * filled + "┄" * (20 - filled)
+                        display_status = f"{status} [{bar}]"
+                    elif status == "已完成":
+                        display_status = "[bold green]✅ 完成[/bold green]"
+                    else:
+                        display_status = status
+
                     table.add_row(
                         model_display,
                         dim, 
