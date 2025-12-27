@@ -115,9 +115,17 @@ def main(args):
     with torch.no_grad():
         inputs_embeds = model.prepare_inputs_embeds(**inputs)
         
+        # 多卡情况下，需要确保 generate 在正确的设备上
+        # 使用 language 模型的设备
+        if hasattr(model.language, 'device'):
+            device = model.language.device
+        else:
+            # 获取 language 模型的第一个参数的设备
+            device = next(model.language.parameters()).device
+        
         outputs = model.language.generate(
-            inputs_embeds=inputs_embeds,
-            attention_mask=inputs.attention_mask,
+            inputs_embeds=inputs_embeds.to(device),
+            attention_mask=inputs.attention_mask.to(device),
             pad_token_id=tokenizer.eos_token_id,
             max_new_tokens=50,
             do_sample=False,
