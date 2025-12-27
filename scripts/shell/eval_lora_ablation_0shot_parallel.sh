@@ -101,7 +101,15 @@ for preset in "${PRESETS[@]}"; do
                 --model_name '$MODEL_ID' \
                 --data_path '$DATA_PATH' \
                 --output_dir '$TASK_OUTPUT_DIR' \
-                --device '$DEVICE' \
+            # 使用占位符 __DEVICE__，由 task_runner 动态替换为 cuda:0 或 cuda:1
+            CMD="$PYTHON_PATH scripts/ablation/run_vlm_evaluation_lora.py \
+                --dimension '$dim' \
+                --base_model_path '$BASELINE_MODEL' \
+                --lora_adapter_path '$CHECKPOINT_DIR' \
+                --model_name '$MODEL_ID' \
+                --data_path '$DATA_PATH' \
+                --output_dir '$TASK_OUTPUT_DIR' \
+                --device '__DEVICE__' \
                 --max_tasks $MAX_TASKS \
                 --num_episodes $NUM_EPISODES"
             
@@ -118,13 +126,14 @@ if [ "$TOTAL_TASKS" -eq 0 ]; then
 fi
 
 echo "准备就绪: 共 $TOTAL_TASKS 个评估任务"
-echo "启动并行评估 (并发数: 3)..."
+echo "启动双卡并行评估 (GPU 0,1 | 每卡3路 | 总并发6)..."
 
-# 调用通用任务执行器
+# 调用任务执行器 (启用 GPU 调度)
 $PYTHON_PATH scripts/utils/task_runner.py \
     --commands "${COMMANDS[@]}" \
     --logs "${LOGS[@]}" \
-    --concurrency 3
+    --gpus "0,1" \
+    --tasks-per-gpu 3
 
 echo ""
 echo "=============================================="
