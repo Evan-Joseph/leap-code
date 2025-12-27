@@ -71,12 +71,20 @@ def main(args):
     print("✅ Processor 加载成功")
     
     # 加载模型
-    print("\n[3/4] 加载模型 (bfloat16, 自动分配多卡)...")
+    # 多卡时使用 balanced_low_0 策略：将模型分布在 GPU 1+ 上，留 GPU 0 给 generate
+    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    if num_gpus > 1:
+        device_map = "balanced_low_0"
+        print(f"\n[3/4] 加载模型 (bfloat16, {num_gpus} GPUs, balanced_low_0)...")
+    else:
+        device_map = "auto"
+        print("\n[3/4] 加载模型 (bfloat16, 单卡)...")
+    
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
-        device_map="auto",
+        device_map=device_map,
     )
     model.eval()
     print("✅ 模型加载成功")
