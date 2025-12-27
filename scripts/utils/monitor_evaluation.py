@@ -123,22 +123,24 @@ def main():
             # 动态获取日志文件
             log_files = get_latest_log_files()
             
-            # 动态调整表格宽度 - 使用 Rich 的 expand 功能
+            # 动态调整表格宽度
+            # 策略调整：关键列定宽，模型列自适应
             table = Table(
                 show_header=True, 
                 header_style="bold magenta", 
                 box=None,
-                padding=(0, 1), # 减少 padding，让 expand 自己分配
-                expand=True,
-                collapse_padding=True
+                padding=(0, 2),
+                expand=True
             )
             
-            # 重新分配 ratio 和对齐方式
-            table.add_column("模型 Checkpoint", style="bright_white", justify="left", ratio=3)
-            table.add_column("维度", style="cyan", justify="center", ratio=1)
-            table.add_column("进度", style="green", justify="center", ratio=2)
-            table.add_column("样本", style="yellow", justify="center", ratio=1)
-            table.add_column("剩余时间", style="bold red", justify="center", ratio=1)
+            # 模型列自适应，但至少给 20 字符
+            table.add_column("模型 Checkpoint", style="bright_white", justify="left", ratio=1, min_width=20)
+            
+            # 其他列使用固定最小宽度，防止被挤压
+            table.add_column("维度", style="cyan", justify="center", width=12)
+            table.add_column("进度", style="green", justify="left", width=16) 
+            table.add_column("样本", style="yellow", justify="right", width=10)
+            table.add_column("剩余时间", style="bold red", justify="right", width=10)
             
             if not log_files:
                 table.add_row("无活跃任务", "-", "-", "-", "-")
