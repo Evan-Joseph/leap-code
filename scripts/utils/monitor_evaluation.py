@@ -14,13 +14,28 @@ console = Console()
 def get_gpu_info():
     try:
         import subprocess
+        # 获取所有 GPU 的信息
         res = subprocess.check_output(["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"])
-        info = res.decode().strip().split(",")
-        used = info[0].strip()
-        total = info[1].strip()
-        util = info[2].strip()
-        return f"{used}MB / {total}MB", f"{util}%"
-    except:
+        lines = res.decode().strip().split("\n")
+        
+        total_used = 0
+        total_capacity = 0
+        total_util = 0
+        count = 0
+        
+        for line in lines:
+            parts = line.split(",")
+            total_used += int(parts[0].strip())
+            total_capacity += int(parts[1].strip())
+            total_util += int(parts[2].strip())
+            count += 1
+            
+        if count == 0:
+            return "N/A", "N/A"
+            
+        # 格式化输出: 总已用 / 总容量 (平均利用率%)
+        return f"{total_used}MB / {total_capacity}MB", f"{int(total_util / count)}%"
+    except Exception as e:
         return "N/A", "N/A"
 
 def get_progress_from_log(log_file):
