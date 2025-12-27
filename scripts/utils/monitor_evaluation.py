@@ -127,18 +127,18 @@ def main():
             table = Table(
                 show_header=True, 
                 header_style="bold magenta", 
-                box=None, 
-                padding=(0, 2),
+                box=None,
+                padding=(0, 1), # 减少 padding，让 expand 自己分配
                 expand=True,
                 collapse_padding=True
             )
             
-            # 使用 ratio 分配宽度
-            table.add_column("模型 Checkpoint", style="bright_white", ratio=4)
-            table.add_column("维度", style="cyan", justify="center", ratio=2)
-            table.add_column("进度", style="green", justify="left", ratio=3)
-            table.add_column("样本", style="yellow", justify="right", width=12)
-            table.add_column("剩余时间", style="bold red", justify="right", width=12)
+            # 重新分配 ratio 和对齐方式
+            table.add_column("模型 Checkpoint", style="bright_white", justify="left", ratio=3)
+            table.add_column("维度", style="cyan", justify="center", ratio=1)
+            table.add_column("进度", style="green", justify="center", ratio=2)
+            table.add_column("样本", style="yellow", justify="center", ratio=1)
+            table.add_column("剩余时间", style="bold red", justify="center", ratio=1)
             
             if not log_files:
                 table.add_row("无活跃任务", "-", "-", "-", "-")
@@ -149,14 +149,15 @@ def main():
                     # 精简显示名称
                     model_display = model.replace("lora_ablation > ", "").replace("lora_", "")
                     
-                    # 进度条可视化
+                    # 进度条可视化 (缩短长度到 10，防止换行)
+                    bar_len = 10
                     if total > 0 and "%" in status:
                         pct = current / total
-                        filled = int(pct * 20)
-                        bar = "━" * filled + "┄" * (20 - filled)
-                        display_status = f"{status} [{bar}]"
+                        filled = int(pct * bar_len)
+                        bar = "━" * filled + "┄" * (bar_len - filled)
+                        display_status = f"{status} {bar}" # 去掉中括号，更紧凑
                     elif status == "已完成":
-                        display_status = "[bold green]✅ 完成[/bold green]"
+                        display_status = "[bold green]✅[/bold green]" # 简短图标
                     else:
                         display_status = status
 
