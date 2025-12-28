@@ -89,7 +89,8 @@ for preset in "${PRESETS[@]}"; do
             # 查看 run_vlm_evaluation_lora.py 逻辑，它会把结果存到 output_dir 下
             # 如果我们并行跑，为了避免冲突，最好指定明确的子目录
             
-            TASK_OUTPUT_DIR="$RESULT_ROOT/$preset/step$step"
+            # 关键修复：增加维度子目录，防止并行进程写入同一个 output.json 发生冲突
+            TASK_OUTPUT_DIR="$RESULT_ROOT/$preset/step$step/${dim//&/and}"
             LOG_FILE="$LOG_ROOT/${preset}_step${step}_${dim//&/and}.log" # 处理 M&T 中的 & 符号
             
             # 构建命令

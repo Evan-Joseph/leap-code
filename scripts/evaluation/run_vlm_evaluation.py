@@ -126,14 +126,17 @@ class CustomVLMEvaluator(VLMEvaluator):
                     json.dump(model_output, f, ensure_ascii=False, indent=4)
                 raise e
             
-            if len(model_output) % save_interval == 0:
+            # 先递增计数，再判断保存（确保断电时进度不丢失）
+            working_number += 1
+            
+            # 修复：使用 working_number 而不是 len(model_output) 判断保存时机
+            if working_number % save_interval == 0:
                 new_existing_num = existing_num + working_number
                 model_output["benchmeatinfo"]["existing_num"] = new_existing_num
                 model_output["benchmeatinfo"]["already_running_time"] = time.time() - working_start_time + already_running_time
                 with open(model_result_output_save_file, 'w', encoding="utf-8") as f:
                     json.dump(model_output, f, ensure_ascii=False, indent=4)
 
-            working_number += 1
 
             now_time = time.time()
             total_using_time = now_time - working_start_time + already_running_time
