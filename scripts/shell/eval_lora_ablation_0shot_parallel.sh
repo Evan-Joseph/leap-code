@@ -28,8 +28,10 @@ DATA_PATH="$WORK_DIR/dataset/vlm_evaluation_v1.0"
 DEVICE="cuda:0"
 
 # LoRA 配置
-PRESETS=("light" "standard" "full" "aggressive")
-STEPS=(2000 3000 4000 5000 6000 7000)
+# 可通过环境变量覆盖，例如: LORA_PRESETS="standard" bash eval_lora_ablation_0shot_parallel.sh
+# 默认顺序：standard 优先
+PRESETS=(${LORA_PRESETS:-"standard" "light" "full" "aggressive"})
+STEPS=(${LORA_STEPS:-2000 3000 4000 5000 6000 7000})
 DIMENSIONS=("M&T" "CommenSence" "Semantic" "Spatial" "PhysicsLaw" "Complex")
 
 # 评估参数 (与 0-shot parallel 保持一致)
