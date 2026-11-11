@@ -1,6 +1,6 @@
 <a name="leap"></a>
 
-# Structured Supervision Targets as a Knowledge Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models
+# Structured Supervision Targets as a Procedural Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models
 
 <p align="center">
   <a href="README_en.md">English</a> · <b>简体中文</b>
@@ -15,17 +15,17 @@
 </p>
 
 <p align="center">
-  <img src="assets/leap_framework.png" width="96%" alt="LEAP Knowledge Interface & Two-Stage Contract Framework" />
+  <img src="assets/leap_framework.png" width="96%" alt="LEAP Procedural Interface & Two-Stage Contract Framework" />
 </p>
 
 ## 1. 简介
 
-本仓库为论文 **《Structured Supervision Targets as a Knowledge Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models》**（项目代号 **LEAP**）的官方 PyTorch 实现。本研究围绕紧凑型多模态大模型 **Qwen3-VL-2B-Instruct**，将监督目标表示形式化为连续多模态感知与离散符号执行器之间的**显式知识接口（Knowledge Interface, $\mathcal{I}_{\mathcal{K}}$）**，并通过严格受控的同域对照实验与两阶段符号契约审计揭示紧凑规划器的核心机制：
+本仓库为论文 **《Structured Supervision Targets as a Procedural Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models》**（项目代号 **LEAP**）的官方 PyTorch 实现。本研究围绕紧凑型多模态大模型 **Qwen3-VL-2B-Instruct**，将训练期监督目标表示形式化为连接连续多模态感知与离散符号执行器的**显式过程接口（Procedural Interface）**，并通过严格受控的同域匹配对照实验与两阶段符号契约诊断揭示紧凑规划器的核心机制：
 
-- **受控知识接口剥离（151,230 训练样本 / 184 项操作任务）**：在固定单首帧头部相机输入（$I_1$, `head_color`）、仅响应区间损失掩码（Response-Only Loss Masking）、贪婪解码及 `VLABench` 严格符号解析门禁（$\psi_{\mathrm{raw}}$）下，有序动作步监督（$\mathcal{T}_{\mathrm{steps}}$）将六维度宏平均分从基座模型的 **25.10** 提升至 **28.38**（Full SFT，$+3.29$，10,000 次配对 Bootstrap $p < 0.001$）与 **28.22**（LoRA $r=16$，$+3.13$，$p < 0.001$）；而使用完全相同图像-指令对与训练步数的**同域任务重述对照（Same-Domain Task-Restatement Control, $\mathcal{T}_{\mathrm{ctrl}}$）**仅为 **25.15**（$+0.05$），证明规划收益源自显式动作分解结构而非具身领域图像曝光。
-- **两阶段符号契约审计（Two-Stage Symbolic Contract Audit, $\psi_{\mathrm{raw}} \to \psi_{\mathrm{relax}} \to \psi_{\mathrm{norm}}$）**：
-  - **Stage 1（语法门禁审计）**：在全部 4,500 个评测实例上放宽 Markdown 代码围栏提取（$\psi_{\mathrm{relax}}$）实现 `0 / 4,500` 额外恢复，证明解析失败全部源于实质性生成截断或 Schema 退化；Full SFT 保持 **96.00%** 解析存活率，显著高于 LoRA 的 **87.75%**。
-  - **Stage 2（实体类型归一化审计）**：消除提示词 Schema 中带引号字符串实体 ID（如 `"4"`）与 `VLABench` 真值整型实体 ID（如 `4`）之间的 Python 强类型比较失配惩罚后，Full SFT（5k）宏平均分由 `28.38` 跃升至 **38.90**（`+10.52`，技能序列准确率 **70.68%**），在全部六个能力维度上一致超越基座模型（`35.66`）与 LoRA（`33.58`）。
+- **受控过程接口剥离（151,230 训练样本 / 184 项操作任务）**：在固定单首帧头部相机输入（$I_1$, `head_color`）、仅响应区间损失掩码（Response-Only Loss Masking）、贪婪解码及 `VLABench` 严格符号解析门禁（$\psi_{\mathrm{raw}}$）下，有序动作步监督（$\mathcal{T}_{\mathrm{steps}}$）将六维度等权宏平均分从基座模型的 **25.10** 提升至 **28.38**（Full SFT，$+3.29$，10,000 次配对 Bootstrap $p < 0.0001$）与 **28.22**（LoRA $r=16$，$+3.13$，$p < 0.0001$）；而使用完全相同图像-指令对与训练步数的**同域任务重述对照（Same-Domain Task-Restatement Control, $\mathcal{T}_{\mathrm{ctrl}}$）**等权宏平均为 **24.26**（实例微平均 **25.15**），证明跨域规划迁移收益源自显式有序动作分解结构而非具身领域词表曝光。
+- **两阶段符号契约诊断（Two-Stage Symbolic Contract Audit, $\psi_{\mathrm{raw}} \to \psi_{\mathrm{relax}} \to \psi_{\mathrm{norm}}$）**：
+  - **Stage 1（语法门禁审计）**：在全部 4,500 个零样本评测实例上放宽 Markdown 代码围栏与括号提取（$\psi_{\mathrm{relax}}$）实现 `0 / 4,500`（`0.00%`）额外恢复，证明解析失败全部源于实质性生成病理而非表层格式噪声；Full SFT（5k）保持 **96.00%**（`4,320 / 4,500`）严格解析存活率并消除 **91.2%** 的散文拒答（`102 → 9`），显著高于 LoRA（5k）的 **86.11%**（`3,875 / 4,500`，`625` 例循环截断）。
+  - **Stage 2（实体类型归一化审计）**：消除提示词 Schema 中带引号字符串实体 ID（如 `"2"`）与 `VLABench` 真值整型实体 ID（如 `2`）之间的 Python 强类型比较失配后，Full SFT（5k）六维宏平均分由 `28.38` 跃升至 **38.90**（`+10.52`，技能序列匹配分 **70.68%**），在全部六个推理维度上一致超越基座模型（`35.66`）与 LoRA（`33.58`，`+5.32`）。
 - **端到端可复现实验管线**：完整包含 `LOVE-Agibot-Beta` 首帧抽帧与动作步清洗、BF16 + SDPA 全量微调、四档秩 LoRA 消融（$r \in \{8, 16, 32, 64\}$）、`VLABench` 六维度评测与两阶段符号契约审计脚本。
 
 <p align="center">
@@ -36,7 +36,7 @@
 
 ```text
 leap-code/
-├── assets/               # 论文知识接口框架图与 VLABench 规划执行对比图
+├── assets/               # 论文过程接口框架图与 VLABench 规划执行对比图
 ├── configs/              # 全局路径与训练/评测常量 (WorkspaceConfig)
 ├── scripts/
 │   ├── download/         # 基座模型与 VLABench 评测集下载脚本
@@ -131,19 +131,19 @@ python scripts/audit/audit_stage2_entity_contract.py
 | 监督配置与训练方案 | M&T ↑ | Semantic ↑ | Spatial ↑ | PhysicalLaw ↑ | Complex ↑ | CommonSense ↑ | 宏平均 ($\psi_{\mathrm{raw}}$) ↑ | 95% Bootstrap CI |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `Qwen3-VL-2B` (Base) | 29.60 | 25.89 | 31.10 | 24.00 | 14.28 | 25.70 | 25.10 | `[24.71, 25.48]` |
-| `Same-Domain Task-Restatement Control` ($\mathcal{T}_{\mathrm{ctrl}}$) | 28.89 | 24.89 | 30.00 | 26.67 | 11.13 | 24.00 | 25.15 | `[24.75, 25.55]` |
-| `Structured Steps + LoRA` ($r=16$, 5k) | **33.18** | 26.73 | 30.70 | 29.60 | 19.02 | **30.10** | 28.22 | `[27.83, 28.61]` |
+| `Same-Domain Task-Restatement Control` ($\mathcal{T}_{\mathrm{ctrl}}$) | 28.89 | 24.89 | 30.00 | 26.67 | 11.13 | 24.00 | 24.26 | *micro: `25.15`* |
+| `Structured Steps + LoRA` ($r=16$, 5k) | **33.18** | 26.73 | 30.70 | 29.60 | 19.02 | **30.10** | 28.22 | `[27.67, 28.77]` |
 | **`Structured Steps + Full SFT` (5k)** | 32.96 | **28.49** | **31.62** | **30.27** | **19.67** | 27.27 | **28.38** | **`[28.01, 28.75]`** |
 
-### 4.2 两阶段符号契约审计（Stage 1 语法存活率 & Stage 2 实体类型归一化 $\psi_{\mathrm{norm}}$）
+### 4.2 两阶段符号契约审计（Stage 1 严格语法存活率 & Stage 2 实体类型归一化 $\psi_{\mathrm{norm}}$）
 
 | 模型变体 (N = 4,500) | 解析存活率 ↑ | $\psi_{\mathrm{raw}}$ ↑ | $\psi_{\mathrm{norm}}$ ↑ | $\Delta(\psi_{\mathrm{norm}}-\psi_{\mathrm{raw}})$ | M&T | Sem. | Spa. | Phy. | Cpx. | CS | 技能匹配 ↑ | 实体匹配 ↑ | 联合步匹配 ↑ | 精确匹配 ↑ |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `Qwen3-VL-2B` (Base) | 99.18% | 25.10 | 35.66 | +10.56 | 45.33 | 40.13 | 39.92 | 24.00 | 24.62 | 39.92 | 62.52% | 26.62% | 18.13% | 4.33% |
-| `Structured Steps + LoRA` (5k) | 87.75% | 28.22 | 33.58 | +5.36 | 42.18 | 32.60 | 36.85 | 29.73 | 23.47 | 36.65 | 60.12% | 23.78% | 18.31% | 2.41% |
+| `Qwen3-VL-2B` (Base) | 93.16% | 25.10 | 35.66 | +10.56 | 45.33 | 40.13 | 39.92 | 24.00 | 24.62 | 39.92 | 62.52% | **26.62%** | 18.13% | 4.33% |
+| `Structured Steps + LoRA` (5k) | 86.11% | 28.22 | 33.58 | +5.36 | 42.18 | 32.60 | 36.85 | 29.60 | 23.47 | 36.65 | 60.12% | 23.78% | 18.31% | 2.41% |
 | `Structured Steps + LoRA` (7k) | 88.80% | 29.16 | 34.80 | +5.64 | 42.16 | 33.89 | 36.77 | **31.40** | 26.27 | 38.30 | 62.24% | 24.75% | 18.91% | 2.49% |
 | `Structured Steps + Full SFT` (7k) | **96.42%** | 28.37 | 38.84 | +10.47 | 46.91 | 40.84 | 40.90 | 30.80 | **32.89** | 40.67 | 70.58% | 26.49% | **22.35%** | **6.71%** |
-| **`Structured Steps + Full SFT` (5k)** | 96.00% | **28.38** | **38.90** | **+10.52** | **47.09** | **41.51** | **40.95** | 30.33 | 32.49 | **41.02** | **70.68%** | **26.54%** | 22.05% | 6.60% |
+| **`Structured Steps + Full SFT` (5k)** | 96.00% | **28.38** | **38.90** | **+10.52** | **47.09** | **41.51** | **40.95** | 30.33 | 32.49 | **41.02** | **70.68%** | 26.54% | 22.05% | 6.60% |
 
 ## 5. 数据与模型资源
 
@@ -159,7 +159,7 @@ python scripts/audit/audit_stage2_entity_contract.py
 
 ```bibtex
 @article{gao2026structured,
-  title={Structured Supervision Targets as a Knowledge Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models},
+  title={Structured Supervision Targets as a Procedural Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models},
   author={Shenzhou Gao and Peijian Zhang},
   year={2026}
 }

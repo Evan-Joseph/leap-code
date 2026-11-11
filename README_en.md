@@ -1,6 +1,6 @@
 <a name="leap-en"></a>
 
-# Structured Supervision Targets as a Knowledge Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models
+# Structured Supervision Targets as a Procedural Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models
 
 <p align="center">
   <b>English</b> · <a href="README.md">简体中文</a>
@@ -15,17 +15,17 @@
 </p>
 
 <p align="center">
-  <img src="assets/leap_framework.png" width="96%" alt="LEAP Knowledge Interface & Two-Stage Contract Framework" />
+  <img src="assets/leap_framework.png" width="96%" alt="LEAP Procedural Interface & Two-Stage Contract Framework" />
 </p>
 
 ## 1. Overview
 
-This repository provides the official PyTorch implementation for **"Structured Supervision Targets as a Knowledge Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models"** (project codename **LEAP**). Built around the compact **Qwen3-VL-2B-Instruct** backbone, this study formulates the supervision-target representation as an explicit **Knowledge Interface ($\mathcal{I}_{\mathcal{K}}$)** bridging continuous multimodal perception and discrete symbolic verifiers:
+This repository provides the official PyTorch implementation for **"Structured Supervision Targets as a Procedural Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models"** (project codename **LEAP**). Built around the compact **Qwen3-VL-2B-Instruct** backbone, this study formulates the training-time supervision target as an explicit **Procedural Interface** bridging continuous multimodal perception and discrete parser-gated execution:
 
-- **Controlled Isolation of the Supervision Target (151,230 Training Samples / 184 Manipulation Tasks)**: Under a fixed visual interface (single initial head-camera frame $I_1$, `head_color`), response-only loss masking, deterministic greedy decoding, and strict parser-gated `VLABench` evaluation ($\psi_{\mathrm{raw}}$), an ordered numbered-step target ($\mathcal{T}_{\mathrm{steps}}$) elevates the six-dimension macro average from **25.10** (Base) to **28.38** under Full SFT ($+3.29$, $p < 0.001$ over 10,000 paired bootstrap resamples) and **28.22** under rank-16 LoRA ($+3.13$, $p < 0.001$). By contrast, a strictly matched **Same-Domain Task-Restatement Control ($\mathcal{T}_{\mathrm{ctrl}}$)** trained on the exact same image-instruction pairs and schedule reaches only **25.15** ($+0.05$), demonstrating that planning gains originate from explicit action-decomposition structure rather than domain exposure.
+- **Controlled Isolation of the Supervision Target (151,230 Training Samples / 184 Manipulation Tasks)**: Under a fixed visual interface (single initial head-camera frame $I_1$, `head_color`), response-only loss masking, deterministic greedy decoding, and strict parser-gated `VLABench` evaluation ($\psi_{\mathrm{raw}}$), an ordered numbered-step target ($\mathcal{T}_{\mathrm{steps}}$) elevates the six-dimension equal-weighted macro average from **25.10** (Base) to **28.38** under Full SFT ($+3.29$, $p < 0.0001$ over 10,000 paired bootstrap resamples) and **28.22** under rank-16 LoRA ($+3.13$, $p < 0.0001$). By contrast, a strictly matched **Same-Domain Task-Restatement Control ($\mathcal{T}_{\mathrm{ctrl}}$)** trained on the exact same image-instruction pairs and schedule reaches **24.26** macro average (**25.15** pooled micro average), demonstrating that cross-domain planning gains originate from explicit procedural step structure rather than domain vocabulary exposure.
 - **Two-Stage Symbolic Contract Audit ($\psi_{\mathrm{raw}} \to \psi_{\mathrm{relax}} \to \psi_{\mathrm{norm}}$)**:
-  - **Stage 1 (Syntax Gate Sensitivity)**: Relaxing Markdown code-fence extraction ($\psi_{\mathrm{relax}}$) across all 4,500 evaluation instances yields `0 / 4,500` salvageable failures, confirming that unparsed outputs reflect genuine structural truncation or schema drift; Full SFT maintains **96.00%** parse survival compared with **87.75%** for LoRA.
-  - **Stage 2 (Entity Type-Normalization)**: Resolving the Python type mismatch between quoted string entity identifiers (`"4"`) induced by the prompt schema and unquoted integer identifiers (`4`) stored in `VLABench` ground truth lifts Full SFT (5k) from `28.38` to **38.90** (`+10.52`, with **70.68%** skill-sequence match), outperforming both Base (`35.66`) and LoRA (`33.58`) across all six capability dimensions.
+  - **Stage 1 (Syntax Gate Sensitivity)**: Relaxing Markdown code-fence and bracket extraction ($\psi_{\mathrm{relax}}$) across all 4,500 zero-shot evaluation instances yields `0 / 4,500` (`0.00%`) salvageable failures, confirming that unparsed outputs reflect genuine structural pathologies rather than formatting noise; Full SFT (5k) achieves **96.00%** (`4,320 / 4,500`) strict parse survival while eliminating **91.2%** of conversational prose refusals (`102 → 9`), outperforming LoRA (5k) at **86.11%** (`3,875 / 4,500`, `625` loop truncations).
+  - **Stage 2 (Entity Type-Normalization)**: Resolving the Python type-serialization mismatch between quoted string entity identifiers (`"2"`) induced by the prompt schema and unquoted integer identifiers (`2`) stored in `VLABench` ground truth lifts Full SFT (5k) from `28.38` to **38.90** (`+10.52`, with **70.68%** skill-sequence match), outperforming both Base (`35.66`) and LoRA (`33.58`, `+5.32`) across all six reasoning dimensions.
 - **Reproducible End-to-End Pipeline**: Includes `LOVE-Agibot-Beta` keyframe extraction and target curation, BF16 + SDPA full-parameter SFT, LoRA rank ablations ($r \in \{8, 16, 32, 64\}$), six-dimension `VLABench` evaluation, and deterministic Stage 1 / Stage 2 contract audit scripts.
 
 <p align="center">
@@ -131,19 +131,19 @@ python scripts/audit/audit_stage2_entity_contract.py
 | Supervision Target & Adaptation | M&T ↑ | Semantic ↑ | Spatial ↑ | PhysicalLaw ↑ | Complex ↑ | CommonSense ↑ | Macro Avg ($\psi_{\mathrm{raw}}$) ↑ | 95% Bootstrap CI |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `Qwen3-VL-2B` (Base) | 29.60 | 25.89 | 31.10 | 24.00 | 14.28 | 25.70 | 25.10 | `[24.71, 25.48]` |
-| `Same-Domain Task-Restatement Control` ($\mathcal{T}_{\mathrm{ctrl}}$) | 28.89 | 24.89 | 30.00 | 26.67 | 11.13 | 24.00 | 25.15 | `[24.75, 25.55]` |
-| `Structured Steps + LoRA` ($r=16$, 5k) | **33.18** | 26.73 | 30.70 | 29.60 | 19.02 | **30.10** | 28.22 | `[27.83, 28.61]` |
+| `Same-Domain Task-Restatement Control` ($\mathcal{T}_{\mathrm{ctrl}}$) | 28.89 | 24.89 | 30.00 | 26.67 | 11.13 | 24.00 | 24.26 | *micro: `25.15`* |
+| `Structured Steps + LoRA` ($r=16$, 5k) | **33.18** | 26.73 | 30.70 | 29.60 | 19.02 | **30.10** | 28.22 | `[27.67, 28.77]` |
 | **`Structured Steps + Full SFT` (5k)** | 32.96 | **28.49** | **31.62** | **30.27** | **19.67** | 27.27 | **28.38** | **`[28.01, 28.75]`** |
 
-### 4.2 Two-Stage Symbolic Contract Audit (Stage 1 Syntax Gate & Stage 2 Entity Type-Normalization $\psi_{\mathrm{norm}}$)
+### 4.2 Two-Stage Symbolic Contract Audit (Stage 1 Strict Syntax Gate & Stage 2 Entity Type-Normalization $\psi_{\mathrm{norm}}$)
 
 | Model Variant (N = 4,500) | Parse Survival ↑ | $\psi_{\mathrm{raw}}$ ↑ | $\psi_{\mathrm{norm}}$ ↑ | $\Delta(\psi_{\mathrm{norm}}-\psi_{\mathrm{raw}})$ | M&T | Sem. | Spa. | Phy. | Cpx. | CS | Skill Match ↑ | Entity Match ↑ | Joint Step ↑ | Exact Plan ↑ |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `Qwen3-VL-2B` (Base) | 99.18% | 25.10 | 35.66 | +10.56 | 45.33 | 40.13 | 39.92 | 24.00 | 24.62 | 39.92 | 62.52% | 26.62% | 18.13% | 4.33% |
-| `Structured Steps + LoRA` (5k) | 87.75% | 28.22 | 33.58 | +5.36 | 42.18 | 32.60 | 36.85 | 29.73 | 23.47 | 36.65 | 60.12% | 23.78% | 18.31% | 2.41% |
+| `Qwen3-VL-2B` (Base) | 93.16% | 25.10 | 35.66 | +10.56 | 45.33 | 40.13 | 39.92 | 24.00 | 24.62 | 39.92 | 62.52% | **26.62%** | 18.13% | 4.33% |
+| `Structured Steps + LoRA` (5k) | 86.11% | 28.22 | 33.58 | +5.36 | 42.18 | 32.60 | 36.85 | 29.60 | 23.47 | 36.65 | 60.12% | 23.78% | 18.31% | 2.41% |
 | `Structured Steps + LoRA` (7k) | 88.80% | 29.16 | 34.80 | +5.64 | 42.16 | 33.89 | 36.77 | **31.40** | 26.27 | 38.30 | 62.24% | 24.75% | 18.91% | 2.49% |
 | `Structured Steps + Full SFT` (7k) | **96.42%** | 28.37 | 38.84 | +10.47 | 46.91 | 40.84 | 40.90 | 30.80 | **32.89** | 40.67 | 70.58% | 26.49% | **22.35%** | **6.71%** |
-| **`Structured Steps + Full SFT` (5k)** | 96.00% | **28.38** | **38.90** | **+10.52** | **47.09** | **41.51** | **40.95** | 30.33 | 32.49 | **41.02** | **70.68%** | **26.54%** | 22.05% | 6.60% |
+| **`Structured Steps + Full SFT` (5k)** | 96.00% | **28.38** | **38.90** | **+10.52** | **47.09** | **41.51** | **40.95** | 30.33 | 32.49 | **41.02** | **70.68%** | 26.54% | 22.05% | 6.60% |
 
 ## 5. Datasets & Models
 
@@ -159,7 +159,7 @@ python scripts/audit/audit_stage2_entity_contract.py
 
 ```bibtex
 @article{gao2026structured,
-  title={Structured Supervision Targets as a Knowledge Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models},
+  title={Structured Supervision Targets as a Procedural Interface for Reliable Parser-Gated Plan Generation in Compact Vision-Language Models},
   author={Shenzhou Gao and Peijian Zhang},
   year={2026}
 }
